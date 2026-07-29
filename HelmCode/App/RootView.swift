@@ -48,7 +48,6 @@ struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 session: session,
-                engine: engine,
                 onOpenSettings: openSettings
             )
             .navigationSplitViewColumnWidth(

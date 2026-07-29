@@ -42,36 +42,7 @@ struct EditorEmptyStateView: View {
             .padding(.horizontal, 32)
 
             if !suggestedFiles.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionCaption(title: "Quick Open")
-
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
-                        alignment: .leading,
-                        spacing: 10
-                    ) {
-                        ForEach(suggestedFiles) { file in
-                            Button {
-                                onOpenFile(file.id)
-                            } label: {
-                                Label(file.name, systemImage: file.systemImage)
-                                    .font(.subheadline)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .background(
-                                        Color(.secondarySystemBackground),
-                                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .frame(maxWidth: 480)
-                .padding(.top, 36)
-                .padding(.horizontal, 32)
+                quickOpenSection
             }
 
             Spacer(minLength: 40)
@@ -97,6 +68,39 @@ struct EditorEmptyStateView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(.secondarySystemBackground), in: Capsule())
+    }
+
+    private var quickOpenSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionCaption(title: "Quick Open")
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(suggestedFiles) { file in
+                    Button {
+                        onOpenFile(file.id)
+                    } label: {
+                        Label(file.name, systemImage: file.systemImage)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                Color(.secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxWidth: 480)
+        .padding(.top, 36)
+        .padding(.horizontal, 32)
     }
 
     private var tipsBar: some View {

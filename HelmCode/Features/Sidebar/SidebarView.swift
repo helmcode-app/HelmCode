@@ -2,20 +2,19 @@
 //  SidebarView.swift
 //  HelmCode
 //
-//  System NavigationSplitView sidebar — workspace tree + pinned Settings.
+//  NavigationSplitView sidebar:
+//  Projects when none open; Files tree when a project is open.
+//  Settings dock stays pinned at the bottom.
 //
 
 import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var session: WorkspaceSession
-    @ObservedObject var engine: HelmCodeNetworkEngine
     var onOpenSettings: () -> Void
 
     var body: some View {
         List(selection: $session.selectedFileID) {
-            workspaceSection
-
             if let project = session.selectedProject {
                 filesSection(project)
             } else {
@@ -29,23 +28,6 @@ struct SidebarView: View {
     }
 
     // MARK: - Sections
-
-    private var workspaceSection: some View {
-        Section {
-            projectPicker
-            connectionBadge
-            if session.selectedProjectID != nil {
-                Button {
-                    session.closeProject()
-                } label: {
-                    Label("Close Project", systemImage: "xmark.circle")
-                }
-                .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Workspace")
-        }
-    }
 
     private func filesSection(_ project: WorkspaceProject) -> some View {
         Section {
@@ -81,18 +63,7 @@ struct SidebarView: View {
                 Button {
                     session.openProject(project.id)
                 } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(project.name)
-                            Text(project.remote)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    } icon: {
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
+                    ProjectListLabel(project: project, secondary: .remote)
                 }
             }
         } header: {
@@ -116,56 +87,5 @@ struct SidebarView: View {
         .scrollDisabled(true)
         .frame(maxHeight: 56)
         .scrollIndicators(.hidden)
-    }
-
-    // MARK: - Rows
-
-    private var projectPicker: some View {
-        Picker("Project", selection: projectSelection) {
-            Text("None").tag(Optional<WorkspaceProject.ID>.none)
-            ForEach(session.projects) { project in
-                Text(project.name).tag(Optional(project.id))
-            }
-        }
-        .pickerStyle(.menu)
-    }
-
-    private var projectSelection: Binding<WorkspaceProject.ID?> {
-        Binding(
-            get: { session.selectedProjectID },
-            set: { session.selectProject($0) }
-        )
-    }
-
-    private var connectionBadge: some View {
-        HStack(spacing: 8) {
-            ConnectionStatusDot(state: engine.connectionState)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sidebarStatusTitle)
-                    .font(.subheadline.weight(.medium))
-                Text(modeLine)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var sidebarStatusTitle: String {
-        switch engine.connectionState {
-        case .online: return "Backend online"
-        case .checking: return "Checking…"
-        case .offline(let msg): return "Offline — \(msg)"
-        case .unknown: return "Not connected"
-        }
-    }
-
-    private var modeLine: String {
-        if let health = engine.health {
-            return "\(health.mode.rawValue) · v\(health.version) · \(health.activeTasks) active"
-        }
-        return engine.helmMode.rawValue
     }
 }

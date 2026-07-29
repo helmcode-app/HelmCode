@@ -2,8 +2,8 @@
 //  EditorDetailView.swift
 //  HelmCode
 //
-//  NavigationSplitView detail routing:
-//  welcome (no project) → empty project (no file) → CodeMirror canvas.
+//  NavigationSplitView detail: welcome → empty project → CodeMirror.
+//  Project switcher sits in the leading toolbar, left of the file name.
 //
 
 import SwiftUI
@@ -15,19 +15,6 @@ struct EditorDetailView: View {
 
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
 
-    /// Center-column surface driven by session selection.
-    private enum Surface: Equatable {
-        case welcome
-        case projectEmpty
-        case editor
-    }
-
-    private var surface: Surface {
-        if session.selectedProjectID == nil { return .welcome }
-        if session.showsProjectEmptyState { return .projectEmpty }
-        return .editor
-    }
-
     var body: some View {
         surfaceContent
             .navigationTitle("")
@@ -36,7 +23,7 @@ struct EditorDetailView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    PlainToolbarLabel(title: toolbarTitle)
+                    leadingToolbar
                 }
                 .sharedBackgroundVisibility(.hidden)
 
@@ -46,43 +33,40 @@ struct EditorDetailView: View {
             }
     }
 
+    // MARK: - Surfaces
+
     @ViewBuilder
     private var surfaceContent: some View {
-        switch surface {
+        switch session.editorSurface {
         case .welcome:
             EditorWelcomeView(session: session, onOpenSettings: onOpenSettings)
-        case .projectEmpty:
-            if let project = session.selectedProject {
-                EditorEmptyStateView(project: project, onOpenFile: session.openFile)
-            } else {
-                EditorWelcomeView(session: session, onOpenSettings: onOpenSettings)
+        case .emptyProject(let project):
+            EditorEmptyStateView(project: project, onOpenFile: session.openFile)
+        case .editing(let project, let file):
+            EditorCanvasView(project: project, file: file, engine: engine)
+        }
+    }
+
+    @ViewBuilder
+    private var leadingToolbar: some View {
+        switch session.editorSurface {
+        case .welcome:
+            PlainToolbarLabel(title: "Welcome")
+
+        case .emptyProject:
+            EditorProjectSwitcher(session: session)
+
+        case .editing(_, let file):
+            HStack(spacing: 10) {
+                EditorProjectSwitcher(session: session)
+                PlainToolbarLabel(title: file.name)
             }
-        case .editor:
-            EditorCanvasView(
-                project: session.selectedProject,
-                file: session.selectedFile,
-                engine: engine
-            )
         }
     }
 
     private func toggleCommander() {
         withAnimation(LayoutMetrics.panelSlideAnimation) {
             showCommander.toggle()
-        }
-    }
-
-    private var toolbarTitle: String {
-        switch surface {
-        case .welcome:
-            return "Welcome"
-        case .projectEmpty:
-            return session.selectedProject?.name ?? "Editor"
-        case .editor:
-            if let file = session.selectedFile, !file.isDirectory {
-                return file.name
-            }
-            return session.selectedProject?.name ?? "Editor"
         }
     }
 }

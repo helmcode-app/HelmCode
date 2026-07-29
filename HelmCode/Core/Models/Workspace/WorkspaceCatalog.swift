@@ -2,13 +2,13 @@
 //  WorkspaceCatalog.swift
 //  HelmCode
 //
-//  Seed projects for the sidebar until live git browsing is wired.
+//  Seed workspaces until live project discovery is wired.
 //
 
 import Foundation
 
-enum WorkspaceCatalog {
-    static let projects: [WorkspaceProject] = [
+enum WorkspaceCatalog: Sendable {
+    nonisolated static let projects: [WorkspaceProject] = [
         WorkspaceProject(
             id: "helmcode-app",
             name: "helmcode",

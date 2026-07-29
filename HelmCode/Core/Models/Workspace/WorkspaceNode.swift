@@ -13,6 +13,11 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
     let remote: String
     let defaultBranch: String
     let root: WorkspaceNode
+
+    /// e.g. `main  ·  github.com/…`
+    var branchRemoteLine: String {
+        "\(defaultBranch)  ·  \(remote)"
+    }
 }
 
 struct WorkspaceNode: Identifiable, Hashable, Sendable {

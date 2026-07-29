@@ -30,7 +30,7 @@ struct EditorWelcomeView: View {
         }
         .background(Color(.systemBackground))
         .sheet(isPresented: $isProjectPickerPresented) {
-            projectPickerSheet
+            OpenProjectSheet(session: session, isPresented: $isProjectPickerPresented)
         }
     }
 
@@ -72,7 +72,7 @@ struct EditorWelcomeView: View {
                     isProjectPickerPresented = true
                 }
 
-                cardDivider
+                InsetGroupedRowDivider()
 
                 startRow(
                     title: "Clone Repository…",
@@ -81,7 +81,7 @@ struct EditorWelcomeView: View {
                     isEnabled: false
                 ) {}
 
-                cardDivider
+                InsetGroupedRowDivider()
 
                 startRow(
                     title: "Settings",
@@ -108,7 +108,7 @@ struct EditorWelcomeView: View {
             } else {
                 InsetGroupedCard {
                     ForEach(Array(session.recentProjects.enumerated()), id: \.element.id) { index, project in
-                        if index > 0 { cardDivider }
+                        if index > 0 { InsetGroupedRowDivider() }
                         recentProjectRow(project)
                     }
                 }
@@ -116,51 +116,7 @@ struct EditorWelcomeView: View {
         }
     }
 
-    // MARK: - Project picker sheet
-
-    private var projectPickerSheet: some View {
-        NavigationStack {
-            List(session.projects) { project in
-                Button {
-                    session.openProject(project.id)
-                    isProjectPickerPresented = false
-                } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(project.name)
-                                .foregroundStyle(.primary)
-                            Text("\(project.defaultBranch)  ·  \(project.remote)")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                }
-            }
-            .navigationTitle("Open Project")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        isProjectPickerPresented = false
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Close")
-                }
-            }
-        }
-    }
-
     // MARK: - Rows
-
-    private var cardDivider: some View {
-        Divider().padding(.leading, 44)
-    }
 
     private func startRow(
         title: String,
@@ -170,7 +126,7 @@ struct EditorWelcomeView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            WelcomeListRow(
+            IconListRow(
                 title: title,
                 subtitle: detail,
                 systemImage: systemImage,
@@ -185,9 +141,9 @@ struct EditorWelcomeView: View {
         Button {
             session.openProject(project.id)
         } label: {
-            WelcomeListRow(
+            IconListRow(
                 title: project.name,
-                subtitle: "\(project.defaultBranch)  ·  \(project.remote)",
+                subtitle: project.branchRemoteLine,
                 subtitleMonospaced: true,
                 systemImage: "folder.fill"
             )

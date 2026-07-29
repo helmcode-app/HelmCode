@@ -1,8 +1,8 @@
 //
-//  InsetGroupedCard.swift
+//  InsetGroupedChrome.swift
 //  HelmCode
 //
-//  Shared card chrome for welcome / empty-state lists.
+//  Shared card chrome for welcome / empty-state surfaces.
 //
 
 import SwiftUI
@@ -37,8 +37,17 @@ struct InsetGroupedCard<Content: View>: View {
     }
 }
 
-/// Leading icon + title/subtitle + optional chevron row used in welcome cards.
-struct WelcomeListRow: View {
+/// Leading inset for dividers that align under icon+title rows.
+struct InsetGroupedRowDivider: View {
+    var leadingInset: CGFloat = 44
+
+    var body: some View {
+        Divider().padding(.leading, leadingInset)
+    }
+}
+
+/// Leading icon + title/subtitle + optional chevron row used in grouped cards.
+struct IconListRow: View {
     let title: String
     var subtitle: String? = nil
     var subtitleMonospaced: Bool = false
@@ -76,5 +85,38 @@ struct WelcomeListRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+/// Folder icon + name + secondary line for project lists (sidebar / pickers).
+struct ProjectListLabel: View {
+    let project: WorkspaceProject
+    var secondary: ProjectSecondary = .remote
+
+    enum ProjectSecondary {
+        case remote
+        case branchRemote
+    }
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name)
+                Text(secondaryText)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } icon: {
+            Image(systemName: "folder.fill")
+                .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    private var secondaryText: String {
+        switch secondary {
+        case .remote: return project.remote
+        case .branchRemote: return project.branchRemoteLine
+        }
     }
 }

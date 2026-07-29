@@ -13,11 +13,11 @@ HelmCode/
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
 │   └── Session/         # WorkspaceSession (project / file / recents)
 ├── Features/
-│   ├── Sidebar/         # Workspace tree or project list + Settings
+│   ├── Sidebar/         # Projects list or file tree + Settings
 │   ├── Editor/          # Welcome · empty project · CodeMirror canvas
 │   ├── Commander/       # System inspector: task prompt + timeline
 │   └── Settings/        # Appearance / layout / backend / shortcuts
-├── Shared/UI/           # Toolbar, cards, status dot, inspector toggle
+├── Shared/UI/           # Toolbar labels, inset cards, status dot, inspector toggle
 └── …/CodeMirror/        # index.html + editor.bundle.js (offline CM6)
 ```
 
@@ -38,11 +38,13 @@ HelmCode/
 
 ### Editor detail surfaces
 
-| State | View |
-|-------|------|
-| No project open | `EditorWelcomeView` (recent projects) |
-| Project open, no file | `EditorEmptyStateView` (quick open) |
-| File selected | `EditorCanvasView` (CodeMirror 6) |
+| State | View | Leading toolbar |
+|-------|------|-----------------|
+| No project open | `EditorWelcomeView` | Welcome |
+| Project open, no file | `EditorEmptyStateView` | Project switcher |
+| File selected | `EditorCanvasView` | Project switcher + file name |
+
+Sidebar: **Projects** list when none open; **Files** tree when a project is open. Project switching lives in the center toolbar (not the sidebar).
 
 ## Backend
 

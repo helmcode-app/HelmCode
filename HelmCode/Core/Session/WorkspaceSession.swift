@@ -9,6 +9,16 @@
 import Combine
 import Foundation
 
+/// Center-column surface driven by project / file selection.
+enum EditorSurface: Equatable {
+    /// No project open — start / recent page.
+    case welcome
+    /// Project open, no editable file selected.
+    case emptyProject(WorkspaceProject)
+    /// Editable file open in CodeMirror.
+    case editing(project: WorkspaceProject, file: WorkspaceNode)
+}
+
 @MainActor
 final class WorkspaceSession: ObservableObject {
     @Published var projects: [WorkspaceProject]
@@ -22,14 +32,15 @@ final class WorkspaceSession: ObservableObject {
     private let recentLimit = 12
 
     init(
-        projects: [WorkspaceProject] = WorkspaceCatalog.projects,
+        projects: [WorkspaceProject]? = nil,
         defaults: UserDefaults = .standard
     ) {
-        self.projects = projects
+        let resolved = projects ?? WorkspaceCatalog.projects
+        self.projects = resolved
         self.defaults = defaults
         self.selectedProjectID = nil
         self.selectedFileID = nil
-        self.recentProjectIDs = Self.loadRecentIDs(from: defaults, known: projects)
+        self.recentProjectIDs = Self.loadRecentIDs(from: defaults, known: resolved)
     }
 
     // MARK: - Selection
@@ -44,11 +55,13 @@ final class WorkspaceSession: ObservableObject {
         return project.root.find(id: id)
     }
 
-    /// True when a project is open but no editable file is selected.
-    var showsProjectEmptyState: Bool {
-        guard selectedProject != nil else { return false }
-        guard let file = selectedFile else { return true }
-        return file.isDirectory
+    /// Single source of truth for center-column routing + toolbar.
+    var editorSurface: EditorSurface {
+        guard let project = selectedProject else { return .welcome }
+        if let file = selectedFile, !file.isDirectory {
+            return .editing(project: project, file: file)
+        }
+        return .emptyProject(project)
     }
 
     var recentProjects: [WorkspaceProject] {
@@ -62,14 +75,6 @@ final class WorkspaceSession: ObservableObject {
         selectedProjectID = id
         selectedFileID = nil
         recordRecent(id)
-    }
-
-    func selectProject(_ id: WorkspaceProject.ID?) {
-        if let id {
-            openProject(id)
-        } else {
-            closeProject()
-        }
     }
 
     func closeProject() {
