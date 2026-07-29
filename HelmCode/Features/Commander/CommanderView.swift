@@ -2,8 +2,9 @@
 //  CommanderView.swift
 //  HelmCode
 //
-//  AI agent command terminal — timeline + composer.
-//  Title + collapse control live in the system toolbar trailing group (DetailCanvasView).
+//  AI agent command terminal — timeline + Cursor-style composer.
+//  Hosted in the system `.inspector` column (see RootView).
+//  Toggle lives on EditorDetailView’s system toolbar.
 //
 
 import SwiftUI
@@ -21,9 +22,9 @@ struct CommanderView: View {
     var body: some View {
         VStack(spacing: 0) {
             timeline
-            Divider()
             composer
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
     }
 
@@ -90,37 +91,10 @@ struct CommanderView: View {
         .padding(.vertical, 40)
     }
 
-    // MARK: - Composer
+    // MARK: - Composer (Cursor-style input card)
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Task prompt")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                phaseChip
-                Spacer(minLength: 0)
-                Text("\(prompt.count)/\(engine.promptCharacterLimit)")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(prompt.count > engine.promptCharacterLimit ? .red : .secondary)
-                if engine.phase.isBusy {
-                    Button("Cancel", role: .destructive) {
-                        Task { await engine.cancelActiveTask() }
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption.weight(.semibold))
-                }
-                Button {
-                    engine.resetSession()
-                    prompt = ""
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .disabled(engine.phase.isBusy)
-                .accessibilityLabel("Clear session")
-            }
-
+        VStack(alignment: .leading, spacing: 0) {
             TextField(
                 "Describe the coding task for the agent…",
                 text: $prompt,
@@ -129,38 +103,73 @@ struct CommanderView: View {
             .textFieldStyle(.plain)
             .lineLimit(3...8)
             .focused($promptFocused)
-            .padding(10)
-            .background(
-                Color(.secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
             .disabled(engine.phase.isBusy)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
-            HStack {
-                if !engine.connectionState.isOnline {
-                    Label("Backend offline", systemImage: "wifi.slash")
-                        .font(.caption)
-                        .foregroundStyle(.red)
+            // Footer inside the input card: status (leading) + send (trailing).
+            HStack(spacing: 8) {
+                backendStatusLabel
+                phaseChip
+                Spacer(minLength: 0)
+
+                if engine.phase.isBusy {
+                    Button {
+                        Task { await engine.cancelActiveTask() }
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .symbolRenderingMode(.hierarchical)
+                            .font(.title2)
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel task")
                 }
-                Spacer()
+
                 Button {
                     Task { await submit() }
                 } label: {
                     if isSubmitting || engine.phase.isBusy {
                         ProgressView()
                             .controlSize(.small)
-                            .padding(.horizontal, 8)
+                            .frame(width: 28, height: 28)
                     } else {
-                        Label("Run Task", systemImage: "paperplane.fill")
+                        // System circular glyph (not a custom bordered button style).
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(
+                                canSubmit ? Color.white : Color.secondary,
+                                canSubmit ? Color.accentColor : Color.secondary.opacity(0.25)
+                            )
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(!canSubmit)
                 .keyboardShortcut(.return, modifiers: [.command])
+                .accessibilityLabel("Run task")
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         }
+        .background(
+            Color(.secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
         .padding(12)
         .background(Color(.systemBackground))
+    }
+
+    private var backendStatusLabel: some View {
+        HStack(spacing: 6) {
+            ConnectionStatusDot(state: engine.connectionState)
+            Text(engine.connectionState.shortTitle)
+                .font(.caption)
+                .foregroundStyle(engine.connectionState.isOnline ? Color.secondary : Color.red)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var phaseChip: some View {

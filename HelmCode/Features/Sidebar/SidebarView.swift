@@ -69,16 +69,20 @@ struct SidebarView: View {
     // MARK: - Rows
 
     private var projectPicker: some View {
-        Picker("Project", selection: $session.selectedProjectID) {
+        Picker("Project", selection: projectSelection) {
             ForEach(session.projects) { project in
                 Text(project.name).tag(Optional(project.id))
             }
         }
         .pickerStyle(.menu)
-        .onChange(of: session.selectedProjectID) { oldValue, newValue in
-            guard oldValue != newValue else { return }
-            session.selectedFileID = nil
-        }
+    }
+
+    /// Clears the open file when the project changes.
+    private var projectSelection: Binding<WorkspaceProject.ID?> {
+        Binding(
+            get: { session.selectedProjectID },
+            set: { session.selectProject($0) }
+        )
     }
 
     private var connectionBadge: some View {

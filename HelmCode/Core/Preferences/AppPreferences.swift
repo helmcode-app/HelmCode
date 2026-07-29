@@ -13,7 +13,6 @@ import SwiftUI
 enum AppStorageKey {
     static let appearance = "helm.appearance"
     static let showSidebar = "helm.column.showSidebar"
-    static let showEditor = "helm.column.showEditor"
     static let showCommander = "helm.column.showCommander"
     static let sidebarWidth = "helm.column.sidebarWidth"
     static let commanderWidth = "helm.column.commanderWidth"
@@ -23,10 +22,12 @@ enum AppStorageKey {
 
 enum LayoutMetrics {
     static let sidebarWidthRange: ClosedRange<Double> = 220...420
-    static let commanderWidthRange: ClosedRange<Double> = 280...640
+    /// System `.inspector` column width bounds (applied on inspector content).
+    static let commanderWidthRange: ClosedRange<Double> = 280...1100
     static let defaultSidebarWidth: Double = 280
-    static let defaultCommanderWidth: Double = 380
-    static let editorMinWidth: CGFloat = 200
+    static let defaultCommanderWidth: Double = 400
+    /// Horizontal inset around the CodeMirror host in the editor column.
+    static let editorHorizontalInset: CGFloat = 4
 
     /// Matches NavigationSplitView sidebar show/hide feel (commander inspector slide).
     static var panelSlideAnimation: Animation {

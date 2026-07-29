@@ -2,7 +2,9 @@
 //  RootView.swift
 //  HelmCode
 //
-//  App shell — system NavigationSplitView sidebar + feature detail canvas.
+//  App shell:
+//  • NavigationSplitView — sidebar + editor detail
+//  • .inspector — Commander (width on inspector content)
 //
 
 import SwiftUI
@@ -16,10 +18,23 @@ struct RootView: View {
 
     @AppStorage(AppStorageKey.appearance) private var appearanceRaw = AppearancePreference.system.rawValue
     @AppStorage(AppStorageKey.showSidebar) private var showSidebar = true
+    @AppStorage(AppStorageKey.showCommander) private var showCommander = true
     @AppStorage(AppStorageKey.sidebarWidth) private var sidebarWidth = LayoutMetrics.defaultSidebarWidth
+    @AppStorage(AppStorageKey.commanderWidth) private var commanderWidth = LayoutMetrics.defaultCommanderWidth
 
     private var appearance: AppearancePreference {
         AppearancePreference.resolve(appearanceRaw)
+    }
+
+    private var commanderPresented: Binding<Bool> {
+        Binding(
+            get: { showCommander },
+            set: { newValue in
+                withAnimation(LayoutMetrics.panelSlideAnimation) {
+                    showCommander = newValue
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -35,13 +50,17 @@ struct RootView: View {
                 max: LayoutMetrics.sidebarWidthRange.upperBound
             )
         } detail: {
-            DetailCanvasView(
-                session: session,
-                engine: engine,
-                onOpenSettings: { isSettingsPresented = true }
-            )
+            EditorDetailView(session: session, engine: engine)
         }
         .navigationSplitViewStyle(.balanced)
+        .inspector(isPresented: commanderPresented) {
+            CommanderView(engine: engine)
+                .inspectorColumnWidth(
+                    min: CGFloat(LayoutMetrics.commanderWidthRange.lowerBound),
+                    ideal: CGFloat(commanderWidth),
+                    max: CGFloat(LayoutMetrics.commanderWidthRange.upperBound)
+                )
+        }
         .preferredColorScheme(appearance.preferredColorScheme)
         .sheet(isPresented: $isSettingsPresented) {
             NavigationStack {

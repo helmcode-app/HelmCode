@@ -2,9 +2,8 @@
 //  InspectorToggleButton.swift
 //  HelmCode
 //
-//  Trailing Commander show/hide control. Rendered as a plain toolbar Button so
-//  NavigationSplitView applies the same chrome/size as the system sidebarToggle
-//  (do not restyle with .bordered / .buttonBorderShape — that diverges from system).
+//  Plain toolbar icon button. Must be placed in a *system* toolbar
+//  (NavigationSplitView detail / NavigationStack) — never restyle with .bordered.
 //
 
 import SwiftUI
@@ -15,7 +14,6 @@ struct InspectorToggleButton: View {
 
     var body: some View {
         Button(action: action) {
-            // Icon-only Label matches how system toolbar items are declared.
             Label(
                 isExpanded ? "Hide Commander" : "Show Commander",
                 systemImage: "sidebar.right"

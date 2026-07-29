@@ -2,7 +2,7 @@
 //  EditorCanvasView.swift
 //  HelmCode
 //
-//  Main code editor — CodeMirror 6 hosted in WKWebView (soft wrap + highlighting).
+//  Code canvas: CodeMirror 6 + status strip.
 //
 
 import SwiftUI
@@ -28,9 +28,9 @@ struct EditorCanvasView: View {
                 text: buffer,
                 language: language,
                 isDark: colorScheme == .dark,
-                isEditable: true,
-                lineWrapping: true
+                isEditable: true
             )
+            .padding(.horizontal, LayoutMetrics.editorHorizontalInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
@@ -51,13 +51,6 @@ struct EditorCanvasView: View {
             Text("LF")
             Text("Wrap")
             Spacer(minLength: 0)
-            Text("CodeMirror 6")
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                .foregroundStyle(Color.accentColor)
-                .fixedSize(horizontal: true, vertical: false)
             Text(engine.phase.label)
                 .foregroundStyle(engine.phase.isBusy ? Color.accentColor : .secondary)
             if let id = engine.activeTaskID {

@@ -1,7 +1,33 @@
+/**
+ * CodeMirror 6 offline editor → window.HelmCodeEditor
+ *
+ * Theme rules (do not regress):
+ *  1. baseTheme(layout) then oneDark — never mount another EditorView.theme after oneDark.
+ *  2. Dark active-line wash is plain CSS on html[data-helm-scheme] (index.html), not a CM theme.
+ */
 import { EditorState } from "@codemirror/state"
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, placeholder } from "@codemirror/view"
+import {
+  EditorView,
+  keymap,
+  lineNumbers,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  drawSelection,
+  dropCursor,
+  rectangularSelection,
+  crosshairCursor,
+  highlightActiveLine,
+} from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
-import { syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap, bracketMatching, indentOnInput } from "@codemirror/language"
+import {
+  syntaxHighlighting,
+  defaultHighlightStyle,
+  foldGutter,
+  foldKeymap,
+  bracketMatching,
+  indentOnInput,
+  StreamLanguage,
+} from "@codemirror/language"
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from "@codemirror/autocomplete"
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search"
 import { lintKeymap } from "@codemirror/lint"
@@ -10,9 +36,10 @@ import { javascript } from "@codemirror/lang-javascript"
 import { json } from "@codemirror/lang-json"
 import { markdown } from "@codemirror/lang-markdown"
 import { cpp } from "@codemirror/lang-cpp"
-import { StreamLanguage } from "@codemirror/language"
 import { swift } from "@codemirror/legacy-modes/mode/swift"
 import { go } from "@codemirror/legacy-modes/mode/go"
+
+// MARK: Language
 
 function languageExtension(lang) {
   switch (lang) {
@@ -39,34 +66,72 @@ function languageExtension(lang) {
   }
 }
 
+// MARK: Theme (layout only — before oneDark)
+
 function baseTheme(isDark) {
-  return EditorView.theme({
-    "&": {
-      height: "100%",
-      fontSize: "14px",
-      backgroundColor: "transparent"
+  return EditorView.theme(
+    {
+      "&": {
+        height: "100%",
+        width: "100%",
+        maxWidth: "100%",
+        fontSize: "14px",
+        backgroundColor: "transparent",
+      },
+      ".cm-scroller": {
+        fontFamily:
+          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        lineHeight: "1.45",
+        overflowX: "hidden",
+        overflowY: "auto",
+      },
+      ".cm-content": {
+        padding: "12px 0",
+        caretColor: isDark ? "#fff" : "#000",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+      },
+      ".cm-line": {
+        maxWidth: "100%",
+        paddingRight: "12px",
+      },
+      ".cm-gutters": {
+        backgroundColor: "transparent",
+        border: "none",
+        color: isDark ? "#6b7280" : "#9ca3af",
+        flexShrink: "0",
+      },
+      "&.cm-focused": {
+        outline: "none",
+      },
     },
-    ".cm-scroller": {
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-      lineHeight: "1.45",
-      overflow: "auto"
-    },
-    ".cm-content": {
-      padding: "12px 0",
-      caretColor: isDark ? "#fff" : "#000"
-    },
-    ".cm-gutters": {
-      backgroundColor: "transparent",
-      border: "none",
-      color: isDark ? "#6b7280" : "#9ca3af"
-    },
-    "&.cm-focused": {
-      outline: "none"
-    }
-  }, { dark: isDark })
+    { dark: isDark },
+  )
 }
 
-function makeExtensions({ language, dark, readOnly, wrap }) {
+/** Drives index.html active-line CSS (CM has no stable .cm-dark class). */
+function setShellScheme(dark) {
+  document.documentElement.dataset.helmScheme = dark ? "dark" : "light"
+}
+
+// MARK: Extensions
+
+function editorKeymap() {
+  return keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap,
+    indentWithTab,
+  ])
+}
+
+function makeExtensions({ language, dark, readOnly }) {
   const exts = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -85,38 +150,29 @@ function makeExtensions({ language, dark, readOnly, wrap }) {
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
-    keymap.of([
-      ...closeBracketsKeymap,
-      ...defaultKeymap,
-      ...searchKeymap,
-      ...historyKeymap,
-      ...foldKeymap,
-      ...completionKeymap,
-      ...lintKeymap,
-      indentWithTab
-    ]),
-    baseTheme(dark)
+    EditorView.lineWrapping,
+    editorKeymap(),
+    baseTheme(dark),
   ]
 
-  if (wrap) {
-    exts.push(EditorView.lineWrapping)
-  }
+  // oneDark must be the last CM theme. Active-line wash is CSS, not a theme.
   if (dark) {
     exts.push(oneDark)
   }
+
   if (readOnly) {
     exts.push(EditorState.readOnly.of(true))
   }
 
   const lang = languageExtension(language)
-  if (Array.isArray(lang)) {
-    // empty
-  } else if (lang) {
+  if (!Array.isArray(lang) && lang) {
     exts.push(lang)
   }
 
   return exts
 }
+
+// MARK: Bootstrap
 
 let view = null
 
@@ -124,46 +180,52 @@ function boot() {
   const root = document.getElementById("editor")
   if (!root) return
 
-  const state = EditorState.create({
-    doc: "",
-    extensions: makeExtensions({
-      language: "swift",
-      dark: true,
-      readOnly: false,
-      wrap: true
-    })
-  })
+  setShellScheme(true)
 
   view = new EditorView({
-    state,
-    parent: root
+    state: EditorState.create({
+      doc: "",
+      extensions: makeExtensions({
+        language: "swift",
+        dark: true,
+        readOnly: false,
+      }),
+    }),
+    parent: root,
   })
 
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => view?.requestMeasure()).observe(root)
+  }
+
   window.HelmCodeEditor = {
-    setDocument({ text, language, dark, readOnly, wrap }) {
+    setDocument({ text, language, dark, readOnly }) {
       if (!view) return
-      const doc = typeof text === "string" ? text : ""
+      const isDark = !!dark
+      setShellScheme(isDark)
       view.setState(
         EditorState.create({
-          doc,
+          doc: typeof text === "string" ? text : "",
           extensions: makeExtensions({
             language: language || "plain",
-            dark: !!dark,
+            dark: isDark,
             readOnly: !!readOnly,
-            wrap: wrap !== false
-          })
-        })
+          }),
+        }),
       )
+      requestAnimationFrame(() => view.requestMeasure())
+    },
+    relayout() {
+      view?.requestMeasure()
     },
     getDocument() {
       return view ? view.state.doc.toString() : ""
     },
     focus() {
       view?.focus()
-    }
+    },
   }
 
-  // Notify native host that CM is ready.
   try {
     window.webkit?.messageHandlers?.helmEditor?.postMessage({ type: "ready" })
   } catch (_) {}

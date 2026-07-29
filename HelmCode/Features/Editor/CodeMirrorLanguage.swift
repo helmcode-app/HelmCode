@@ -2,7 +2,7 @@
 //  CodeMirrorLanguage.swift
 //  HelmCode
 //
-//  Language ids accepted by the bundled CM6 `languageExtension` switch.
+//  Language ids accepted by bundled CM6 `languageExtension`.
 //
 
 import Foundation
@@ -14,6 +14,7 @@ enum CodeMirrorLanguage: String, Sendable, CaseIterable {
     case json
     case markdown = "md"
     case go
+    case cpp
     case plain
 
     init(languageHint: String?) {
@@ -24,6 +25,7 @@ enum CodeMirrorLanguage: String, Sendable, CaseIterable {
         case "json": self = .json
         case "md": self = .markdown
         case "go": self = .go
+        case "cpp", "c": self = .cpp
         default: self = .plain
         }
     }
@@ -36,6 +38,7 @@ enum CodeMirrorLanguage: String, Sendable, CaseIterable {
         case .json: return "JSON"
         case .markdown: return "Markdown"
         case .go: return "Go"
+        case .cpp: return "C/C++"
         case .plain: return "Plain Text"
         }
     }

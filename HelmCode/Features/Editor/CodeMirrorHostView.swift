@@ -2,7 +2,7 @@
 //  CodeMirrorHostView.swift
 //  HelmCode
 //
-//  WKWebView host for the bundled CodeMirror 6 editor.
+//  WKWebView host for the offline CodeMirror 6 bundle.
 //
 
 import SwiftUI
@@ -13,7 +13,6 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var language: CodeMirrorLanguage
     var isDark: Bool
     var isEditable: Bool = true
-    var lineWrapping: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -31,6 +30,11 @@ struct CodeMirrorHostView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.keyboardDismissMode = .interactive
+        // Soft-wrap is inside CM; outer scroller is vertical-only.
+        webView.scrollView.alwaysBounceHorizontal = false
+        webView.scrollView.isDirectionalLockEnabled = true
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        webView.scrollView.bounces = true
         #if DEBUG
         if #available(iOS 16.4, *) {
             webView.isInspectable = true
@@ -45,6 +49,8 @@ struct CodeMirrorHostView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.pushDocumentIfNeeded()
+        // Soft-wrap remeasures when inspector open/resize changes host width.
+        context.coordinator.requestRelayout()
     }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
@@ -111,7 +117,6 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 "language": parent.language.rawValue,
                 "dark": parent.isDark,
                 "readOnly": !parent.isEditable,
-                "wrap": parent.lineWrapping,
             ]
 
             guard
@@ -120,9 +125,14 @@ struct CodeMirrorHostView: UIViewRepresentable {
             else { return }
 
             webView.evaluateJavaScript(
-                "window.HelmCodeEditor && window.HelmCodeEditor.setDocument(\(json));",
+                CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json),
                 completionHandler: nil
             )
+        }
+
+        func requestRelayout() {
+            guard isReady, let webView else { return }
+            webView.evaluateJavaScript(CodeMirrorBundle.relayoutJavaScript, completionHandler: nil)
         }
 
         private var documentKey: String {
@@ -130,7 +140,6 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 parent.language.rawValue,
                 parent.isDark ? "d" : "l",
                 parent.isEditable ? "e" : "r",
-                parent.lineWrapping ? "w" : "n",
                 parent.text,
             ].joined(separator: "\u{1e}")
         }

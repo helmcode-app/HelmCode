@@ -3,7 +3,6 @@
 //  HelmCode
 //
 //  Central settings — appearance, layout, backend, about.
-//  Add new preference sections here as features grow.
 //
 
 import SwiftUI
@@ -14,7 +13,6 @@ struct SettingsView: View {
 
     @AppStorage(AppStorageKey.appearance) private var appearanceRaw = AppearancePreference.system.rawValue
     @AppStorage(AppStorageKey.showSidebar) private var showSidebar = true
-    @AppStorage(AppStorageKey.showEditor) private var showEditor = true
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
     @AppStorage(AppStorageKey.sidebarWidth) private var sidebarWidth = LayoutMetrics.defaultSidebarWidth
     @AppStorage(AppStorageKey.commanderWidth) private var commanderWidth = LayoutMetrics.defaultCommanderWidth
@@ -69,11 +67,8 @@ struct SettingsView: View {
             Toggle(isOn: $showSidebar) {
                 Label("Sidebar", systemImage: "sidebar.left")
             }
-            Toggle(isOn: editorVisibility) {
-                Label("Editor", systemImage: "doc.richtext")
-            }
-            Toggle(isOn: commanderVisibility) {
-                Label("Commander", systemImage: "terminal")
+            Toggle(isOn: $showCommander) {
+                Label("Commander", systemImage: "sidebar.right")
             }
             Button("Reset Column Widths") {
                 sidebarWidth = LayoutMetrics.defaultSidebarWidth
@@ -82,7 +77,7 @@ struct SettingsView: View {
         } header: {
             Text("Workspace Layout")
         } footer: {
-            Text("Drag the column dividers to resize. Double-tap a divider to snap width.")
+            Text("Sidebar and Commander use system NavigationSplitView / inspector chrome. Drag system dividers to resize.")
         }
     }
 
@@ -145,28 +140,6 @@ struct SettingsView: View {
                 LabeledContent("Version", value: version)
             }
         }
-    }
-
-    // MARK: - Visibility
-
-    private var editorVisibility: Binding<Bool> {
-        Binding(
-            get: { showEditor },
-            set: { newValue in
-                if !newValue && !showCommander && !showSidebar { return }
-                showEditor = newValue
-            }
-        )
-    }
-
-    private var commanderVisibility: Binding<Bool> {
-        Binding(
-            get: { showCommander },
-            set: { newValue in
-                if !newValue && !showEditor && !showSidebar { return }
-                showCommander = newValue
-            }
-        )
     }
 
     // MARK: - Backend

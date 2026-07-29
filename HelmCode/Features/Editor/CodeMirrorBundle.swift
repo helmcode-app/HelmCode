@@ -2,14 +2,19 @@
 //  CodeMirrorBundle.swift
 //  HelmCode
 //
-//  Resolves bundled CodeMirror host assets (index.html + editor.bundle.js).
+//  Bundled CM6 asset lookup + JS bridge identifiers.
 //
 
 import Foundation
 
 enum CodeMirrorBundle {
-    /// Message handler name registered on the WKWebView bridge.
+    /// `WKScriptMessageHandler` name (must match editor-entry.mjs postMessage).
     static let messageHandlerName = "helmEditor"
+
+    /// Global installed by `editor.bundle.js`.
+    static let jsGlobal = "window.HelmCodeEditor"
+
+    // MARK: - Asset resolution
 
     /// Locates `index.html`. Xcode may flatten resources into the app root.
     static func indexHTMLURL(in bundle: Bundle = .main) -> URL? {
@@ -23,5 +28,15 @@ enum CodeMirrorBundle {
             ),
         ]
         return candidates.compactMap { $0 }.first
+    }
+
+    // MARK: - JS bridge snippets
+
+    static func setDocumentJavaScript(jsonObjectLiteral: String) -> String {
+        "\(jsGlobal) && \(jsGlobal).setDocument(\(jsonObjectLiteral));"
+    }
+
+    static var relayoutJavaScript: String {
+        "\(jsGlobal) && \(jsGlobal).relayout && \(jsGlobal).relayout();"
     }
 }

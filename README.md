@@ -1,12 +1,12 @@
 # HelmCode
 
-Mobile-first, premium iPad AI coding console — pure SwiftUI shell with a **CodeMirror 6** editor host, connected to **runner-core** (`open-core` HTTP API).
+Mobile-first iPad AI coding console — pure SwiftUI shell with a **CodeMirror 6** editor host, connected to **runner-core** (`open-core` HTTP API).
 
 ## Architecture
 
 ```
 HelmCode/
-├── App/                 # @main, RootView (NavigationSplitView shell)
+├── App/                 # @main, RootView (NavigationSplitView + .inspector)
 ├── Core/
 │   ├── Models/          # API + workspace domain types
 │   ├── Network/         # RunnerCoreAPIClient + HelmCodeNetworkEngine
@@ -14,20 +14,27 @@ HelmCode/
 │   └── Session/         # WorkspaceSession (project / file selection)
 ├── Features/
 │   ├── Sidebar/         # System sidebar list + Settings entry
-│   ├── Editor/          # CodeMirror 6 WKWebView host
-│   ├── Commander/       # Task prompt + event timeline
-│   ├── Settings/        # Appearance / layout / backend
-│   └── Shell/           # Detail canvas (editor + inspector)
-├── Shared/UI/           # Resize handle, toolbar labels, toggles
+│   ├── Editor/          # Detail column + CodeMirror 6 WKWebView host
+│   ├── Commander/       # System inspector: task prompt + event timeline
+│   └── Settings/        # Appearance / layout / backend
+├── Shared/UI/           # Toolbar labels, inspector toggle, status dot
 └── …/CodeMirror/        # index.html + editor.bundle.js (offline CM6)
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
-| **App** | DI, split-view chrome, settings sheet |
+| **App** | DI, NavigationSplitView + inspector chrome, settings sheet |
 | **Core** | Domain models, HTTP, prefs, session state |
 | **Features** | UI surfaces by product area |
 | **Shared** | Cross-feature controls |
+
+### Shell layout
+
+| Column | Mechanism |
+|--------|-----------|
+| Sidebar (leading) | `NavigationSplitView` system sidebar |
+| Editor (center) | Split-view detail + system toolbar |
+| Commander (trailing) | System `.inspector` column |
 
 ## Backend
 
@@ -50,6 +57,11 @@ Rebuild the offline editor bundle:
 ```bash
 ./scripts/rebuild-codemirror.sh
 ```
+
+Theme constraints (see `Features/Editor/CodeMirror/README.md`):
+
+- CM themes: `baseTheme` then `oneDark` only — nothing after `oneDark`
+- Dark caret-row highlight: `data-helm-scheme` + CSS in `index.html`
 
 ## Build
 
