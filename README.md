@@ -13,7 +13,7 @@ HelmCode/
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
 │   └── Session/         # WorkspaceSession (project / file / recents)
 ├── Features/
-│   ├── Sidebar/         # Projects list or file tree + Settings
+│   ├── Sidebar/         # Projects · navigator tabs (Files / Bookmarks / SCM)
 │   ├── Editor/          # Welcome · empty project · CodeMirror canvas
 │   ├── Commander/       # System inspector: task prompt + timeline
 │   └── Settings/        # Appearance / layout / backend / shortcuts
@@ -44,7 +44,17 @@ HelmCode/
 | Project open, no file | `EditorEmptyStateView` | Project switcher |
 | File selected | `EditorCanvasView` | Project switcher + file name |
 
-Sidebar: **Projects** list when none open; **Files** tree when a project is open. Project switching lives in the center toolbar (not the sidebar).
+### Sidebar
+
+| State | Content |
+|-------|---------|
+| No project | **Projects** list |
+| Project open | System segmented **navigator**: Files · Bookmarks · Source Control |
+
+- **Files** — outline tree; create / rename / delete / bookmark via context menu  
+- **Bookmarks** — saved nodes; empty state is text-only, centered  
+- **Source Control** — local mock (stage / commit / pull·push·fetch)  
+- Project switching lives in the **center toolbar** (not the sidebar)
 
 ## Backend
 

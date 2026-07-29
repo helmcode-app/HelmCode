@@ -18,6 +18,10 @@ enum AppStorageKey {
     static let commanderWidth = "helm.column.commanderWidth"
     /// Comma-separated project ids, most-recent first.
     static let recentProjectIDs = "helm.workspace.recentProjectIDs"
+    /// JSON-encoded `[WorkspaceBookmark]`.
+    static let workspaceBookmarks = "helm.workspace.bookmarks"
+    /// Selected sidebar navigator tab (`SidebarNavigator.rawValue`).
+    static let sidebarNavigator = "helm.sidebar.navigator"
 }
 
 // MARK: - Layout metrics

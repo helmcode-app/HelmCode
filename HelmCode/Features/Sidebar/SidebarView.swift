@@ -2,9 +2,9 @@
 //  SidebarView.swift
 //  HelmCode
 //
-//  NavigationSplitView sidebar:
-//  Projects when none open; Files tree when a project is open.
-//  Settings dock stays pinned at the bottom.
+//  NavigationSplitView sidebar shell:
+//  • No project — Projects list
+//  • Project open — Xcode-style navigator tabs (Files / Bookmarks / SCM)
 //
 
 import SwiftUI
@@ -13,65 +13,117 @@ struct SidebarView: View {
     @ObservedObject var session: WorkspaceSession
     var onOpenSettings: () -> Void
 
+    @AppStorage(AppStorageKey.sidebarNavigator) private var navigatorRaw = SidebarNavigator.files.rawValue
+
+    @State private var dialog: SidebarTreeDialog?
+    @State private var nameDraft = ""
+    @State private var commitMessage = ""
+
+    private var navigator: Binding<SidebarNavigator> {
+        Binding(
+            get: { SidebarNavigator(rawValue: navigatorRaw) ?? .files },
+            set: { navigatorRaw = $0.rawValue }
+        )
+    }
+
+    private var currentNavigator: SidebarNavigator {
+        SidebarNavigator(rawValue: navigatorRaw) ?? .files
+    }
+
     var body: some View {
-        List(selection: $session.selectedFileID) {
+        Group {
             if let project = session.selectedProject {
-                filesSection(project)
+                projectNavigator(project)
             } else {
-                projectsSection
+                projectsList
             }
         }
-        .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             settingsDock
         }
-    }
-
-    // MARK: - Sections
-
-    private func filesSection(_ project: WorkspaceProject) -> some View {
-        Section {
-            OutlineGroup(project.root.children, children: \.directoryChildren) { node in
-                Label {
-                    Text(node.name)
-                        .lineLimit(1)
-                } icon: {
-                    Image(systemName: node.systemImage)
-                        .foregroundStyle(node.isDirectory ? Color.accentColor : .secondary)
-                }
-                .tag(node.id)
-                .accessibilityLabel(node.path)
+        .alert(dialog?.title ?? "", isPresented: dialogPresented) {
+            dialogButtons
+        } message: {
+            if let dialog {
+                Text(dialog.message)
             }
-        } header: {
-            HStack {
-                Text("Files")
-                Spacer()
-                Text(project.defaultBranch)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-        } footer: {
-            Text(project.remote)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+        }
+        .alert(
+            "Can't complete action",
+            isPresented: Binding(
+                get: { session.lastTreeError != nil },
+                set: { if !$0 { session.lastTreeError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { session.lastTreeError = nil }
+        } message: {
+            Text(session.lastTreeError ?? "")
         }
     }
 
-    private var projectsSection: some View {
-        Section {
-            ForEach(session.projects) { project in
-                Button {
-                    session.openProject(project.id)
-                } label: {
-                    ProjectListLabel(project: project, secondary: .remote)
-                }
-            }
-        } header: {
-            Text("Projects")
-        } footer: {
-            Text("Open a project to browse files, or use the welcome page.")
-                .font(.caption2)
+    // MARK: - Project navigator
+
+    private func projectNavigator(_ project: WorkspaceProject) -> some View {
+        VStack(spacing: 0) {
+            SidebarNavigatorTabBar(
+                selection: navigator,
+                badges: navigatorBadges
+            )
+            navigatorContent(project)
         }
+    }
+
+    private var navigatorBadges: [SidebarNavigator: Int] {
+        var badges: [SidebarNavigator: Int] = [:]
+        let bookmarkCount = session.activeBookmarks.count
+        if bookmarkCount > 0 {
+            badges[.bookmarks] = bookmarkCount
+        }
+        if let count = session.sourceControl?.changeCount, count > 0 {
+            badges[.sourceControl] = count
+        }
+        return badges
+    }
+
+    @ViewBuilder
+    private func navigatorContent(_ project: WorkspaceProject) -> some View {
+        switch currentNavigator {
+        case .files:
+            SidebarFilesView(
+                session: session,
+                project: project,
+                onPresentDialog: present(_:)
+            )
+        case .bookmarks:
+            SidebarBookmarksView(session: session)
+        case .sourceControl:
+            SidebarSourceControlView(
+                session: session,
+                commitMessage: $commitMessage
+            )
+        }
+    }
+
+    // MARK: - Projects (no open project)
+
+    private var projectsList: some View {
+        List {
+            Section {
+                ForEach(session.projects) { project in
+                    Button {
+                        session.openProject(project.id)
+                    } label: {
+                        ProjectListLabel(project: project, secondary: .remote)
+                    }
+                }
+            } header: {
+                Text("Projects")
+            } footer: {
+                Text("Open a project to browse files, or use the welcome page.")
+                    .font(.caption2)
+            }
+        }
+        .listStyle(.sidebar)
     }
 
     private var settingsDock: some View {
@@ -87,5 +139,40 @@ struct SidebarView: View {
         .scrollDisabled(true)
         .frame(maxHeight: 56)
         .scrollIndicators(.hidden)
+    }
+
+    // MARK: - Tree dialogs
+
+    private var dialogPresented: Binding<Bool> {
+        Binding(
+            get: { dialog != nil },
+            set: { if !$0 { dialog = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private var dialogButtons: some View {
+        if let dialog {
+            if dialog.usesNameField {
+                TextField("Name", text: $nameDraft)
+                Button("Cancel", role: .cancel) { self.dialog = nil }
+                Button(dialog.confirmTitle) { confirmDialog() }
+            } else {
+                Button("Cancel", role: .cancel) { self.dialog = nil }
+                Button("Delete", role: .destructive) { confirmDialog() }
+            }
+        } else {
+            Button("OK", role: .cancel) {}
+        }
+    }
+
+    private func present(_ value: SidebarTreeDialog) {
+        nameDraft = value.defaultNameDraft
+        dialog = value
+    }
+
+    private func confirmDialog() {
+        defer { dialog = nil }
+        dialog?.apply(to: session, nameDraft: nameDraft)
     }
 }
