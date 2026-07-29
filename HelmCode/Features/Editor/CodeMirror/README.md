@@ -13,6 +13,14 @@ Offline assets for `CodeMirrorHostView`.
 1. **Theme order:** `baseTheme` (layout) → `oneDark` (dark only). Do **not** mount another `EditorView.theme` after `oneDark` — that has wiped text colors in WKWebView.
 2. **Dark active line:** set `document.documentElement.dataset.helmScheme` and style `.cm-activeLine` / `.cm-activeLineGutter` in `index.html`. CM does not expose a stable `.cm-dark` class.
 3. Soft-wrap is always on (`EditorView.lineWrapping` + CSS).
+4. **Font size** lives in a `Compartment` (before `oneDark`), not a post-oneDark theme.
+
+## Keyboard shortcuts
+
+In-app reference: **Settings → About → Keyboard Shortcuts**  
+(`EditorKeyboardShortcuts.swift` — keep in sync with `helmEditorKeymap` in `editor-entry.mjs`).
+
+Core bindings (editor focused): font zoom `⌘+/-/0`, undo/redo, find, comment, indent, move/delete line, fold, etc. Plus CodeMirror defaults.
 
 ## Rebuild
 

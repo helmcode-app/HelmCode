@@ -4,8 +4,9 @@
  * Theme rules (do not regress):
  *  1. baseTheme(layout) then oneDark — never mount another EditorView.theme after oneDark.
  *  2. Dark active-line wash is plain CSS on html[data-helm-scheme] (index.html), not a CM theme.
+ *  3. Font-size uses a Compartment (not a theme after oneDark).
  */
-import { EditorState } from "@codemirror/state"
+import { EditorState, Compartment } from "@codemirror/state"
 import {
   EditorView,
   keymap,
@@ -18,7 +19,24 @@ import {
   crosshairCursor,
   highlightActiveLine,
 } from "@codemirror/view"
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  indentMore,
+  indentLess,
+  deleteLine,
+  moveLineDown,
+  moveLineUp,
+  selectAll,
+  selectLine,
+  toggleComment,
+  insertBlankLine,
+  cursorLineBoundaryBackward,
+  cursorLineBoundaryForward,
+  simplifySelection,
+} from "@codemirror/commands"
 import {
   syntaxHighlighting,
   defaultHighlightStyle,
@@ -27,9 +45,12 @@ import {
   bracketMatching,
   indentOnInput,
   StreamLanguage,
+  toggleFold,
+  foldAll,
+  unfoldAll,
 } from "@codemirror/language"
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from "@codemirror/autocomplete"
-import { searchKeymap, highlightSelectionMatches } from "@codemirror/search"
+import { searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel } from "@codemirror/search"
 import { lintKeymap } from "@codemirror/lint"
 import { oneDark } from "@codemirror/theme-one-dark"
 import { javascript } from "@codemirror/lang-javascript"
@@ -38,6 +59,41 @@ import { markdown } from "@codemirror/lang-markdown"
 import { cpp } from "@codemirror/lang-cpp"
 import { swift } from "@codemirror/legacy-modes/mode/swift"
 import { go } from "@codemirror/legacy-modes/mode/go"
+
+// MARK: Font size (IDE zoom)
+
+const FONT_DEFAULT = 14
+const FONT_MIN = 10
+const FONT_MAX = 28
+const FONT_STEP = 1
+
+/** Survives setDocument(); only reset when the web view is recreated. */
+let fontSizePx = FONT_DEFAULT
+const fontSizeCompartment = new Compartment()
+
+function clampFontSize(n) {
+  return Math.min(FONT_MAX, Math.max(FONT_MIN, n))
+}
+
+/** Layout-only theme for current size — kept *before* oneDark via compartment slot. */
+function fontSizeTheme(size) {
+  return EditorView.theme({
+    "&": { fontSize: `${size}px` },
+  })
+}
+
+function setFontSize(view, size) {
+  fontSizePx = clampFontSize(size)
+  view.dispatch({
+    effects: fontSizeCompartment.reconfigure(fontSizeTheme(fontSizePx)),
+  })
+  view.requestMeasure()
+  return true
+}
+
+function bumpFontSize(view, delta) {
+  return setFontSize(view, fontSizePx + delta * FONT_STEP)
+}
 
 // MARK: Language
 
@@ -66,7 +122,7 @@ function languageExtension(lang) {
   }
 }
 
-// MARK: Theme (layout only — before oneDark)
+// MARK: Theme (layout only — before oneDark; no fontSize here)
 
 function baseTheme(isDark) {
   return EditorView.theme(
@@ -75,7 +131,6 @@ function baseTheme(isDark) {
         height: "100%",
         width: "100%",
         maxWidth: "100%",
-        fontSize: "14px",
         backgroundColor: "transparent",
       },
       ".cm-scroller": {
@@ -116,7 +171,48 @@ function setShellScheme(dark) {
   document.documentElement.dataset.helmScheme = dark ? "dark" : "light"
 }
 
-// MARK: Extensions
+// MARK: Keymaps
+
+/**
+ * Desktop-IDE-style bindings on top of CM defaults.
+ * Zoom uses preventDefault so the host doesn’t steal Mod-= / Mod--.
+ */
+function helmEditorKeymap() {
+  return keymap.of([
+    // Font size (VS Code / Xcode style)
+    { key: "Mod-=", run: (v) => bumpFontSize(v, 1), preventDefault: true },
+    { key: "Mod-+", run: (v) => bumpFontSize(v, 1), preventDefault: true },
+    { key: "Mod--", run: (v) => bumpFontSize(v, -1), preventDefault: true },
+    { key: "Mod-_", run: (v) => bumpFontSize(v, -1), preventDefault: true },
+    { key: "Mod-0", run: (v) => setFontSize(v, FONT_DEFAULT), preventDefault: true },
+
+    // Common edit / structure (also in defaultKeymap; listed for explicit Mac IDE parity)
+    { key: "Mod-a", run: selectAll },
+    { key: "Mod-l", run: selectLine },
+    { key: "Mod-/", run: toggleComment },
+    { key: "Mod-]", run: indentMore },
+    { key: "Mod-[", run: indentLess },
+    { key: "Shift-Mod-k", run: deleteLine },
+    { key: "Alt-ArrowUp", run: moveLineUp },
+    { key: "Alt-ArrowDown", run: moveLineDown },
+    { key: "Mod-Enter", run: insertBlankLine },
+    // Xcode-style: ⌘← / ⌘→ jump to line bounds (overrides word-hop).
+    { key: "Mod-ArrowLeft", run: cursorLineBoundaryBackward },
+    { key: "Mod-ArrowRight", run: cursorLineBoundaryForward },
+
+    // Fold (⌘⌥[ / ⌘⌥])
+    { key: "Mod-Alt-[", run: foldAll },
+    { key: "Mod-Alt-]", run: unfoldAll },
+    { key: "Mod-Alt-.", run: toggleFold },
+
+    // Search (also in searchKeymap); Esc closes panel then clears selection.
+    { key: "Mod-f", run: openSearchPanel },
+    {
+      key: "Escape",
+      run: (v) => closeSearchPanel(v) || simplifySelection(v),
+    },
+  ])
+}
 
 function editorKeymap() {
   return keymap.of([
@@ -130,6 +226,8 @@ function editorKeymap() {
     indentWithTab,
   ])
 }
+
+// MARK: Extensions
 
 function makeExtensions({ language, dark, readOnly }) {
   const exts = [
@@ -152,10 +250,14 @@ function makeExtensions({ language, dark, readOnly }) {
     highlightSelectionMatches(),
     EditorView.lineWrapping,
     editorKeymap(),
+    // Higher precedence than defaults so zoom / IDE keys win when overlapping.
+    helmEditorKeymap(),
     baseTheme(dark),
+    // Font size compartment before oneDark (layout-only theme).
+    fontSizeCompartment.of(fontSizeTheme(fontSizePx)),
   ]
 
-  // oneDark must be the last CM theme. Active-line wash is CSS, not a theme.
+  // oneDark must be the last CM *color* theme.
   if (dark) {
     exts.push(oneDark)
   }
@@ -220,6 +322,14 @@ function boot() {
     },
     getDocument() {
       return view ? view.state.doc.toString() : ""
+    },
+    getFontSize() {
+      return fontSizePx
+    },
+    setFontSize(size) {
+      if (!view) return fontSizePx
+      setFontSize(view, Number(size) || FONT_DEFAULT)
+      return fontSizePx
     },
     focus() {
       view?.focus()

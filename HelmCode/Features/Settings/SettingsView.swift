@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  HelmCode
 //
-//  Central settings — appearance, layout, backend, about.
+//  Sheet: appearance, layout, backend, about (+ keyboard shortcuts).
 //
 
 import SwiftUI
@@ -35,7 +35,12 @@ struct SettingsView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Done") { dismiss() }
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("Close")
             }
         }
         .onAppear {
@@ -133,12 +138,21 @@ struct SettingsView: View {
     }
 
     private var aboutSection: some View {
-        Section("About") {
+        Section {
+            NavigationLink {
+                EditorKeyboardShortcutsView()
+            } label: {
+                Label("Keyboard Shortcuts", systemImage: "keyboard")
+            }
             LabeledContent("App", value: "HelmCode")
             LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
                 LabeledContent("Version", value: version)
             }
+        } header: {
+            Text("About")
+        } footer: {
+            Text("Editor shortcuts need focus in the code pane and a hardware keyboard.")
         }
     }
 
