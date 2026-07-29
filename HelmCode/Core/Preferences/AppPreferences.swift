@@ -16,6 +16,8 @@ enum AppStorageKey {
     static let showCommander = "helm.column.showCommander"
     static let sidebarWidth = "helm.column.sidebarWidth"
     static let commanderWidth = "helm.column.commanderWidth"
+    /// Comma-separated project ids, most-recent first.
+    static let recentProjectIDs = "helm.workspace.recentProjectIDs"
 }
 
 // MARK: - Layout metrics

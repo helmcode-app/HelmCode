@@ -47,4 +47,24 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
         }
         return nil
     }
+
+    /// Depth-first list of non-directory nodes (e.g. Quick Open suggestions).
+    func collectFiles(limit: Int) -> [WorkspaceNode] {
+        guard limit > 0 else { return [] }
+        var result: [WorkspaceNode] = []
+        collectFiles(into: &result, limit: limit)
+        return result
+    }
+
+    private func collectFiles(into result: inout [WorkspaceNode], limit: Int) {
+        guard result.count < limit else { return }
+        if !isDirectory {
+            result.append(self)
+            return
+        }
+        for child in children {
+            child.collectFiles(into: &result, limit: limit)
+            if result.count >= limit { return }
+        }
+    }
 }

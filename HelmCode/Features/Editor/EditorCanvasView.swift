@@ -16,7 +16,7 @@ struct EditorCanvasView: View {
     @ObservedObject var engine: HelmCodeNetworkEngine
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var buffer: String = EditorCanvasView.placeholder
+    @State private var buffer: String = ""
 
     private var language: CodeMirrorLanguage {
         CodeMirrorLanguage(languageHint: file?.languageHint)
@@ -68,17 +68,9 @@ struct EditorCanvasView: View {
 
     private func reloadBuffer() {
         guard let file, !file.isDirectory, let project else {
-            buffer = Self.placeholder
+            buffer = ""
             return
         }
         buffer = EditorSampleLibrary.content(for: file.path, project: project.name)
     }
-
-    private static let placeholder = """
-    // HelmCode · CodeMirror 6
-    //
-    // Select a file from the workspace sidebar.
-    // Soft-wrap and language highlighting are provided by CodeMirror 6.
-
-    """
 }

@@ -11,13 +11,13 @@ HelmCode/
 │   ├── Models/          # API + workspace domain types
 │   ├── Network/         # RunnerCoreAPIClient + HelmCodeNetworkEngine
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
-│   └── Session/         # WorkspaceSession (project / file selection)
+│   └── Session/         # WorkspaceSession (project / file / recents)
 ├── Features/
-│   ├── Sidebar/         # System sidebar list + Settings entry
-│   ├── Editor/          # Detail column + CodeMirror 6 WKWebView host
-│   ├── Commander/       # System inspector: task prompt + event timeline
-│   └── Settings/        # Appearance / layout / backend
-├── Shared/UI/           # Toolbar labels, inspector toggle, status dot
+│   ├── Sidebar/         # Workspace tree or project list + Settings
+│   ├── Editor/          # Welcome · empty project · CodeMirror canvas
+│   ├── Commander/       # System inspector: task prompt + timeline
+│   └── Settings/        # Appearance / layout / backend / shortcuts
+├── Shared/UI/           # Toolbar, cards, status dot, inspector toggle
 └── …/CodeMirror/        # index.html + editor.bundle.js (offline CM6)
 ```
 
@@ -33,8 +33,16 @@ HelmCode/
 | Column | Mechanism |
 |--------|-----------|
 | Sidebar (leading) | `NavigationSplitView` system sidebar |
-| Editor (center) | Split-view detail + system toolbar |
+| Editor (center) | Detail: welcome → empty project → CodeMirror |
 | Commander (trailing) | System `.inspector` column |
+
+### Editor detail surfaces
+
+| State | View |
+|-------|------|
+| No project open | `EditorWelcomeView` (recent projects) |
+| Project open, no file | `EditorEmptyStateView` (quick open) |
+| File selected | `EditorCanvasView` (CodeMirror 6) |
 
 ## Backend
 
@@ -62,6 +70,7 @@ Theme constraints (see `Features/Editor/CodeMirror/README.md`):
 
 - CM themes: `baseTheme` then `oneDark` only — nothing after `oneDark`
 - Dark caret-row highlight: `data-helm-scheme` + CSS in `index.html`
+- Font size via `Compartment`; shortcuts listed in Settings → About
 
 ## Build
 

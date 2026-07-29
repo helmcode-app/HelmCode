@@ -40,12 +40,16 @@ struct RootView: View {
         )
     }
 
+    private func openSettings() {
+        isSettingsPresented = true
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 session: session,
                 engine: engine,
-                onOpenSettings: { isSettingsPresented = true }
+                onOpenSettings: openSettings
             )
             .navigationSplitViewColumnWidth(
                 min: LayoutMetrics.sidebarWidthRange.lowerBound,
@@ -53,7 +57,11 @@ struct RootView: View {
                 max: LayoutMetrics.sidebarWidthRange.upperBound
             )
         } detail: {
-            EditorDetailView(session: session, engine: engine)
+            EditorDetailView(
+                session: session,
+                engine: engine,
+                onOpenSettings: openSettings
+            )
         }
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: commanderPresented) {
