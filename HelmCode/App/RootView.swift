@@ -8,6 +8,9 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RootView: View {
     @EnvironmentObject private var engine: HelmCodeNetworkEngine
@@ -55,6 +58,8 @@ struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: commanderPresented) {
             CommanderView(engine: engine)
+                // Keep inspector chrome the same fill when keyboard shifts content.
+                .containerBackground(Color(.systemBackground), for: .navigation)
                 .inspectorColumnWidth(
                     min: CGFloat(LayoutMetrics.commanderWidthRange.lowerBound),
                     ideal: CGFloat(commanderWidth),

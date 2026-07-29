@@ -24,8 +24,13 @@ struct CommanderView: View {
             timeline
             composer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Hardware-keyboard focus can shift the column up and expose the
+        // inspector chrome below; paint the same fill into that gap.
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+        }
     }
 
     // MARK: - Timeline
@@ -158,7 +163,6 @@ struct CommanderView: View {
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .padding(12)
-        .background(Color(.systemBackground))
     }
 
     private var backendStatusLabel: some View {
