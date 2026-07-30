@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  Project-wide search navigator (Xcode / VS Code Find in Workspace).
+//  Match Case / Whole Word are clickable labels inside the search field.
 //
 
 import SwiftUI
@@ -17,14 +18,35 @@ struct SidebarSearchView: View {
     @State private var groups: [ProjectSearchFileGroup] = []
     @State private var hasSearched = false
 
+    private enum Metrics {
+        /// Magnifying glass ↔ field ↔ option cluster.
+        static let fieldClusterSpacing: CGFloat = 4
+        /// Aa ↔ W ↔ clear (and W → trailing edge via padding).
+        static let optionSpacing: CGFloat = 6
+        static let fieldHorizontalPadding: CGFloat = 8
+        static let fieldVerticalPadding: CGFloat = 6
+        static let headerHorizontalPadding: CGFloat = 10
+        static let searchDebounceNanoseconds: UInt64 = 180_000_000
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var matchCount: Int {
         groups.reduce(0) { $0 + $1.matches.count }
+    }
+
+    private var resultSummary: String {
+        if matchCount == 0 { return "No results" }
+        let fileWord = groups.count == 1 ? "file" : "files"
+        let matchWord = matchCount == 1 ? "result" : "results"
+        return "\(matchCount) \(matchWord) in \(groups.count) \(fileWord)"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             searchHeader
-            Divider()
             resultsList
         }
         .onChange(of: query) { _, _ in scheduleSearch() }
@@ -36,77 +58,66 @@ struct SidebarSearchView: View {
     // MARK: - Header
 
     private var searchHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
+        VStack(alignment: .leading, spacing: 6) {
+            searchField
+            if hasSearched, !trimmedQuery.isEmpty {
+                Text(resultSummary)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                TextField("Search", text: $query)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .onSubmit { runSearch() }
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                        groups = []
-                        hasSearched = false
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                    .lineLimit(1)
+                    .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(.horizontal, Metrics.headerHorizontalPadding)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
 
-            HStack(spacing: 12) {
-                Toggle(isOn: $caseSensitive) {
-                    Text("Aa")
-                        .font(.caption.weight(.semibold).monospaced())
-                }
-                .toggleStyle(.button)
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .help("Match Case")
+    private var searchField: some View {
+        HStack(spacing: Metrics.fieldClusterSpacing) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
 
-                Toggle(isOn: $matchWholeWord) {
-                    Text("W")
-                        .font(.caption.weight(.semibold).monospaced())
-                }
-                .toggleStyle(.button)
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .help("Match Whole Word")
+            TextField("Search", text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { runSearch() }
 
-                Spacer(minLength: 0)
-
-                if hasSearched, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(resultSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            HStack(spacing: Metrics.optionSpacing) {
+                SearchMatchOptionLabel(title: "Aa", help: "Match Case", isOn: $caseSensitive)
+                SearchMatchOptionLabel(title: "W", help: "Match Whole Word", isOn: $matchWholeWord)
+                if !query.isEmpty {
+                    clearButton
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Metrics.fieldHorizontalPadding)
+        .padding(.vertical, Metrics.fieldVerticalPadding)
+        .background(
+            Color(.secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
     }
 
-    private var resultSummary: String {
-        if matchCount == 0 { return "No results" }
-        let fileWord = groups.count == 1 ? "file" : "files"
-        let matchWord = matchCount == 1 ? "result" : "results"
-        return "\(matchCount) \(matchWord) in \(groups.count) \(fileWord)"
+    private var clearButton: some View {
+        Button {
+            query = ""
+            groups = []
+            hasSearched = false
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Clear Search")
     }
 
     // MARK: - Results
 
     @ViewBuilder
     private var resultsList: some View {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        if trimmedQuery.isEmpty {
             emptyState(
                 title: "Search in Project",
                 subtitle: "Find text across files in \(project.name)."
@@ -114,7 +125,7 @@ struct SidebarSearchView: View {
         } else if hasSearched, groups.isEmpty {
             emptyState(
                 title: "No Results",
-                subtitle: "No matches for “\(trimmed)”."
+                subtitle: "No matches for “\(trimmedQuery)”."
             )
         } else {
             List {
@@ -122,7 +133,7 @@ struct SidebarSearchView: View {
                     Section {
                         ForEach(group.matches) { match in
                             Button {
-                                open(match)
+                                session.openFile(match.nodeID, revealLine: match.line)
                             } label: {
                                 matchRow(match)
                             }
@@ -138,8 +149,8 @@ struct SidebarSearchView: View {
 
     private func fileHeader(_ group: ProjectSearchFileGroup) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: fileSystemImage(group.languageHint))
-                .foregroundStyle(fileIconColor(group.languageHint))
+            Image(systemName: WorkspaceNodeIconStyle.systemImage(forLanguageHint: group.languageHint))
+                .foregroundStyle(WorkspaceNodeIconStyle.color(forLanguageHint: group.languageHint))
             Text(group.fileName)
                 .font(.subheadline.weight(.semibold))
             Text("\(group.matches.count)")
@@ -178,58 +189,52 @@ struct SidebarSearchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Actions
-
-    private func open(_ match: ProjectSearchMatch) {
-        session.openFile(match.nodeID, revealLine: match.line)
-    }
+    // MARK: - Search
 
     private func scheduleSearch() {
-        // Light debounce via main async; fine for sample workspace sizes.
         let snapshot = query
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Metrics.searchDebounceNanoseconds)
             guard snapshot == query else { return }
             runSearch()
         }
     }
 
     private func runSearch() {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        guard !trimmedQuery.isEmpty else {
             groups = []
             hasSearched = false
             return
         }
         groups = ProjectSearch.search(
             project: project,
-            query: trimmed,
+            query: trimmedQuery,
             caseSensitive: caseSensitive,
             matchWholeWord: matchWholeWord
         )
         hasSearched = true
     }
+}
 
-    private func fileSystemImage(_ hint: String?) -> String {
-        switch hint {
-        case "swift": return "swift"
-        case "ts", "js": return "curlybraces"
-        case "json": return "curlybraces.square"
-        case "md": return "doc.richtext"
-        case "go": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc.text"
+// MARK: - Match option label
+
+/// Clickable text (not a bordered button): accent when on, secondary when off.
+private struct SearchMatchOptionLabel: View {
+    let title: String
+    let help: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            Text(title)
+                .font(.caption.weight(.semibold).monospaced())
+                .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
         }
-    }
-
-    private func fileIconColor(_ hint: String?) -> Color {
-        // Synthetic node for color helper.
-        let node = WorkspaceNode(
-            id: "tmp",
-            name: "tmp",
-            path: "tmp",
-            isDirectory: false,
-            children: [],
-            languageHint: hint
-        )
-        return WorkspaceNodeIconStyle.color(for: node)
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

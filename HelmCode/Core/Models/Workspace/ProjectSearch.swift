@@ -47,16 +47,6 @@ struct ProjectSearchFileGroup: Identifiable, Hashable, Sendable {
     let matches: [ProjectSearchMatch]
 }
 
-enum ProjectSearchOptions: Sendable, Equatable {
-    case defaultInsensitive
-
-    var caseInsensitive: Bool {
-        switch self {
-        case .defaultInsensitive: return true
-        }
-    }
-}
-
 enum ProjectSearch {
     /// Cap results so large trees stay responsive in the sidebar.
     static let maxMatches = 200
