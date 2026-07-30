@@ -52,7 +52,20 @@ import {
   unfoldAll,
 } from "@codemirror/language"
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from "@codemirror/autocomplete"
-import { searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel } from "@codemirror/search"
+import {
+  search,
+  searchKeymap,
+  highlightSelectionMatches,
+  openSearchPanel,
+  closeSearchPanel,
+  findNext,
+  findPrevious,
+  replaceNext,
+  replaceAll,
+  getSearchQuery,
+  setSearchQuery,
+  SearchQuery,
+} from "@codemirror/search"
 import { lintKeymap } from "@codemirror/lint"
 import { oneDark } from "@codemirror/theme-one-dark"
 import { javascript } from "@codemirror/lang-javascript"
@@ -271,11 +284,332 @@ function goToLine(view, lineNumber) {
   view.focus()
 }
 
-// MARK: Keymaps
+// MARK: Find / replace panel (VS Code widget chrome)
+// Field shell metrics mirror Shared/UI/HelmSearchFieldChrome.swift (capsule).
+
+/** Consumed by the next panel construction: ⌘⌥F opens with Replace expanded. */
+let pendingOpenWithReplace = false
+
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag)
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "className") node.className = value
+    else if (key === "text") node.textContent = value
+    else if (key.startsWith("on") && typeof value === "function") {
+      node.addEventListener(key.slice(2).toLowerCase(), value)
+    } else if (value === true) node.setAttribute(key, "")
+    else if (value !== false && value != null) node.setAttribute(key, String(value))
+  }
+  for (const child of children) {
+    if (child == null) continue
+    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child)
+  }
+  return node
+}
+
+function helmTextField({ name, placeholder, value, mainField = false }) {
+  return el("input", {
+    className: "helm-search-input",
+    name,
+    type: "search",
+    placeholder,
+    "aria-label": placeholder,
+    ...(mainField ? { "main-field": "true" } : {}),
+    autocomplete: "off",
+    autocorrect: "off",
+    autocapitalize: "off",
+    spellcheck: "false",
+    value: value || "",
+  })
+}
+
+/** Capsule field shell — same role as SwiftUI `helmSearchFieldChrome()`. */
+function helmFieldWrap(input, trailing = []) {
+  const kids = [input]
+  if (trailing.length) {
+    kids.push(el("div", { className: "helm-search-toggles" }, trailing))
+  }
+  return el("div", { className: "helm-search-field-wrap" }, kids)
+}
+
+/** Aa / W / .* — plain monospaced label; accent when on (matches SearchMatchOptionLabel). */
+function helmMatchOption(label, title, on) {
+  const btn = el("button", {
+    type: "button",
+    className: "helm-search-toggle" + (on ? " is-on" : ""),
+    title,
+    "aria-label": title,
+    "aria-pressed": on ? "true" : "false",
+    text: label,
+  })
+  btn.addEventListener("click", (e) => {
+    e.preventDefault()
+    const next = btn.getAttribute("aria-pressed") !== "true"
+    setMatchOptionPressed(btn, next)
+    btn.dispatchEvent(new CustomEvent("helm-toggle", { bubbles: true }))
+  })
+  return btn
+}
+
+function setMatchOptionPressed(btn, on) {
+  btn.setAttribute("aria-pressed", on ? "true" : "false")
+  btn.classList.toggle("is-on", on)
+}
+
+function isMatchOptionOn(btn) {
+  return btn.getAttribute("aria-pressed") === "true"
+}
+
+function helmSearchButton({ label, title, onClick, className = "helm-search-btn" }) {
+  return el("button", {
+    type: "button",
+    className,
+    title,
+    "aria-label": title,
+    text: label,
+    onClick: (e) => {
+      e.preventDefault()
+      onClick()
+    },
+  })
+}
+
+/**
+ * Sync expand/collapse on panel root DOM.
+ * Class + hidden + display — CSS `display: grid` would otherwise ignore [hidden].
+ */
+function syncReplaceOpenDOM(root, open) {
+  if (!root) return
+  root.classList.toggle("is-replace-open", open)
+  const replaceRow = root.querySelector(".helm-search-row-replace")
+  const expand = root.querySelector(".helm-search-expand")
+  if (replaceRow) {
+    replaceRow.hidden = !open
+    replaceRow.setAttribute("aria-hidden", open ? "false" : "true")
+    replaceRow.style.display = open ? "" : "none"
+  }
+  if (expand) {
+    expand.setAttribute("aria-expanded", open ? "true" : "false")
+    expand.textContent = open ? "▼" : "▶"
+    expand.title = open ? "Hide Replace" : "Show Replace"
+  }
+}
+
+function focusPanelField(panel, wantReplace) {
+  if (!panel) return
+  const input = wantReplace
+    ? panel.querySelector("input[name=replace]") || panel.querySelector("input[name=search]")
+    : panel.querySelector("input[name=search]")
+  if (!input) return
+  input.focus()
+  if (typeof input.select === "function") input.select()
+}
+
+/**
+ * VS Code–style find widget:
+ * · Fixed width, top-right · ⌘F find-only · chevron / ⌘⌥F expands Replace
+ */
+class HelmSearchPanel {
+  constructor(view) {
+    this.view = view
+    const q = getSearchQuery(view.state)
+    this.replaceExpanded = !!pendingOpenWithReplace && !view.state.readOnly
+    pendingOpenWithReplace = false
+
+    this.searchField = helmTextField({
+      name: "search",
+      placeholder: "Find",
+      value: q.search,
+      mainField: true,
+    })
+    this.replaceField = helmTextField({
+      name: "replace",
+      placeholder: "Replace",
+      value: q.replace,
+    })
+
+    this.caseBtn = helmMatchOption("Aa", "Match Case", q.caseSensitive)
+    this.wordBtn = helmMatchOption("W", "Match Whole Word", q.wholeWord)
+    this.reBtn = helmMatchOption(".*", "Use Regular Expression", q.regexp)
+
+    const commit = () => this.commit()
+    this.searchField.addEventListener("input", commit)
+    this.replaceField.addEventListener("input", commit)
+    for (const btn of [this.caseBtn, this.wordBtn, this.reBtn]) {
+      btn.addEventListener("helm-toggle", commit)
+    }
+
+    this.expandBtn = el("button", {
+      type: "button",
+      className: "helm-search-expand",
+      title: "Toggle Replace",
+      "aria-label": "Toggle Replace",
+      "aria-expanded": "false",
+    })
+    this.expandBtn.addEventListener("click", (e) => {
+      e.preventDefault()
+      this.setReplaceExpanded(!this.replaceExpanded)
+    })
+    if (view.state.readOnly) {
+      this.expandBtn.disabled = true
+      this.expandBtn.title = "Replace unavailable (read-only)"
+    }
+
+    const findRow = el("div", { className: "helm-search-row helm-search-row-find" }, [
+      helmFieldWrap(this.searchField, [this.caseBtn, this.wordBtn, this.reBtn]),
+      el("div", { className: "helm-search-trailing" }, [
+        el("div", { className: "helm-search-actions helm-search-actions-icons" }, [
+          helmSearchButton({
+            label: "↑",
+            title: "Previous Match",
+            onClick: () => findPrevious(view),
+          }),
+          helmSearchButton({
+            label: "↓",
+            title: "Next Match",
+            onClick: () => findNext(view),
+          }),
+          helmSearchButton({
+            label: "✕",
+            title: "Close",
+            className: "helm-search-btn helm-search-close",
+            onClick: () => closeSearchPanel(view),
+          }),
+        ]),
+      ]),
+    ])
+
+    this.replaceRow = el("div", { className: "helm-search-row helm-search-row-replace" }, [
+      helmFieldWrap(this.replaceField),
+      el("div", { className: "helm-search-trailing" }, [
+        el("div", { className: "helm-search-actions" }, [
+          helmSearchButton({
+            label: "Replace",
+            title: "Replace",
+            className: "helm-search-btn helm-search-btn-text",
+            onClick: () => {
+              this.commit()
+              replaceNext(view)
+            },
+          }),
+          helmSearchButton({
+            label: "All",
+            title: "Replace All",
+            className: "helm-search-btn helm-search-btn-text",
+            onClick: () => {
+              this.commit()
+              replaceAll(view)
+            },
+          }),
+        ]),
+      ]),
+    ])
+
+    this.dom = el("div", { className: "cm-search helm-search", role: "search" }, [
+      this.expandBtn,
+      el("div", { className: "helm-search-body" }, [findRow, this.replaceRow]),
+    ])
+    this.dom.addEventListener("keydown", (e) => this.onKeyDown(e))
+    this.applyReplaceExpanded()
+  }
+
+  get top() {
+    return true
+  }
+
+  mount() {
+    this.searchField.select()
+  }
+
+  setReplaceExpanded(on) {
+    if (this.view.state.readOnly) return
+    this.replaceExpanded = !!on
+    this.applyReplaceExpanded()
+    if (this.replaceExpanded) {
+      requestAnimationFrame(() => {
+        this.replaceField.focus()
+        this.replaceField.select()
+      })
+    }
+  }
+
+  applyReplaceExpanded() {
+    syncReplaceOpenDOM(this.dom, this.replaceExpanded && !this.view.state.readOnly)
+  }
+
+  commit() {
+    const query = new SearchQuery({
+      search: this.searchField.value,
+      replace: this.replaceField.value,
+      caseSensitive: isMatchOptionOn(this.caseBtn),
+      wholeWord: isMatchOptionOn(this.wordBtn),
+      regexp: isMatchOptionOn(this.reBtn),
+    })
+    if (!query.eq(getSearchQuery(this.view.state))) {
+      this.view.dispatch({ effects: setSearchQuery.of(query) })
+    }
+  }
+
+  onKeyDown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault()
+      closeSearchPanel(this.view)
+      return
+    }
+    if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === "f" || e.key === "F")) {
+      e.preventDefault()
+      this.setReplaceExpanded(true)
+      return
+    }
+    if (e.key === "Enter" && e.target === this.searchField) {
+      e.preventDefault()
+      this.commit()
+      ;(e.shiftKey ? findPrevious : findNext)(this.view)
+      return
+    }
+    if (e.key === "Enter" && e.target === this.replaceField) {
+      e.preventDefault()
+      this.commit()
+      replaceNext(this.view)
+    }
+  }
+
+  update(update) {
+    for (const tr of update.transactions) {
+      for (const effect of tr.effects) {
+        if (effect.is(setSearchQuery)) this.syncFromQuery(effect.value)
+      }
+    }
+  }
+
+  syncFromQuery(query) {
+    if (this.searchField.value !== query.search) this.searchField.value = query.search
+    if (this.replaceField.value !== query.replace) this.replaceField.value = query.replace
+    setMatchOptionPressed(this.caseBtn, query.caseSensitive)
+    setMatchOptionPressed(this.wordBtn, query.wholeWord)
+    setMatchOptionPressed(this.reBtn, query.regexp)
+  }
+}
+
+/** Open find panel; `withReplace` expands Replace like VS Code ⌘⌥F. */
+function openFindPanel(view, withReplace = false) {
+  const wantReplace = !!withReplace && !view.state.readOnly
+  pendingOpenWithReplace = wantReplace
+  const ok = openSearchPanel(view)
+  const apply = () => {
+    const panel = view.dom.querySelector(".helm-search")
+    syncReplaceOpenDOM(panel, wantReplace)
+    focusPanelField(panel, wantReplace)
+  }
+  apply()
+  requestAnimationFrame(apply)
+  return ok
+}
 
 /**
  * Desktop-IDE-style bindings on top of CM defaults.
- * Zoom uses preventDefault so the host doesn’t steal Mod-= / Mod--.
+ * Zoom / find use preventDefault so the host doesn’t steal Mod keys.
+ * Note: on iPad, ⌘F often never reaches JS — Swift UIKeyCommand also calls runCommand("find").
  */
 function helmEditorKeymap() {
   return keymap.of([
@@ -309,13 +643,55 @@ function helmEditorKeymap() {
     { key: "Mod-Alt-]", run: unfoldAll },
     { key: "Mod-Alt-.", run: toggleFold },
 
-    // Search (also in searchKeymap); Esc closes panel then clears selection.
-    { key: "Mod-f", run: openSearchPanel },
+    // Find widget (⌘F find-only; ⌘⌥F expand replace) — VS Code parity.
+    {
+      key: "Mod-f",
+      run: (v) => openFindPanel(v, false),
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      key: "Mod-Alt-f",
+      run: (v) => openFindPanel(v, true),
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    { key: "Mod-g", run: findNext, preventDefault: true },
+    { key: "Shift-Mod-g", run: findPrevious, preventDefault: true },
     {
       key: "Escape",
       run: (v) => closeSearchPanel(v) || simplifySelection(v),
+      preventDefault: true,
     },
   ])
+}
+
+/**
+ * Capture-phase fallback when key events reach the document but not CM’s keymap
+ * (still won’t help if UIKit never delivers ⌘F — that’s the Swift UIKeyCommand path).
+ */
+function installFindKeyCapture() {
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      if (!view) return
+      const mod = event.metaKey || event.ctrlKey
+      if (!mod) return
+      const key = (event.key || "").toLowerCase()
+      if (key === "f") {
+        event.preventDefault()
+        event.stopPropagation()
+        openFindPanel(view, event.altKey)
+      } else if (key === "g" && event.shiftKey) {
+        event.preventDefault()
+        findPrevious(view)
+      } else if (key === "g") {
+        event.preventDefault()
+        findNext(view)
+      }
+    },
+    true,
+  )
 }
 
 function editorKeymap() {
@@ -354,6 +730,11 @@ function makeExtensions({ language, dark, readOnly }) {
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
+    // IDE-style find/replace docked to the top of the editor (⌘F).
+    search({
+      top: true,
+      createPanel: (v) => new HelmSearchPanel(v),
+    }),
     EditorView.lineWrapping,
     editorKeymap(),
     // Higher precedence than defaults so zoom / IDE keys win when overlapping.
@@ -470,7 +851,13 @@ function boot() {
         case "selectLine":
           return !!selectLine(view)
         case "find":
-          return !!openSearchPanel(view)
+          return !!openFindPanel(view, false)
+        case "findReplace":
+          return !!openFindPanel(view, true)
+        case "findNext":
+          return !!findNext(view)
+        case "findPrevious":
+          return !!findPrevious(view)
         case "indentMore":
           return !!indentMore(view)
         case "indentLess":
@@ -482,6 +869,8 @@ function boot() {
       }
     },
   }
+
+  installFindKeyCapture()
 
   try {
     window.webkit?.messageHandlers?.helmEditor?.postMessage({ type: "ready" })

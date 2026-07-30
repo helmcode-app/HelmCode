@@ -22,6 +22,10 @@ In-app reference: **Settings → About → Keyboard Shortcuts**
 
 Core bindings (editor focused): font zoom `⌘+/-/0`, undo/redo, find, comment, indent, move/delete line, fold, etc. Plus CodeMirror defaults.
 
+**Find (`⌘F`):** VS Code–style floating widget — **fixed width, top-right**, find-only by default. Left **▶/▼** expands Replace. `⌘⌥F` opens with replace expanded. Search state uses CM `SearchQuery`; chrome is `HelmSearchPanel` + `.helm-search` CSS.
+
+On iPad, `CodeMirrorWebView` uses `UIKeyCommand` + `wantsPriorityOverSystemBehavior` so `⌘F` reaches the editor. Esc closes; `⌘G` / `⌘⇧G` find next/previous.
+
 **Line bookmarks (Xcode-style):** `⌘ F2` / `⌘ ⌥ B` toggles the caret line; click the bookmark gutter to toggle that line. Host APIs: `setBookmarks([line…])`, `goToLine(n)`. Markers are filled bookmark SVG icons (color in `index.html`, not a CM color theme).
 
 ## System context menu (custom entries)

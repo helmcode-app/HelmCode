@@ -68,6 +68,307 @@
     html[data-helm-scheme="dark"] .cm-bookmark-mark {
       color: #64d2ff; /* dark: lighter system blue */
     }
+
+    /*
+     * Find widget (⌘F) + field chrome — keep in sync with
+     * Shared/UI/HelmSearchFieldChrome.swift (iOS capsule shell,
+     * secondarySystemFill, option spacing 6, accent/secondary toggles).
+     * Layout: fixed width, top-right; find-only until chevron expands Replace.
+     */
+    .cm-panels {
+      z-index: 5;
+    }
+    .cm-panels.cm-panels-top {
+      border-bottom: none;
+      background: transparent !important;
+    }
+    .cm-panels.cm-panels-top .cm-panel {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+
+    .helm-search {
+      /* === sync HelmSearchFieldMetrics (Swift) — capsule shell === */
+      --helm-field-radius: 999px;
+      --helm-field-height: 36px;
+      --helm-field-pad-x: 12px;
+      --helm-option-gap: 6px;
+      --helm-cluster-gap: 6px;
+      --helm-search-width: 420px;
+      /* Trailing column width (↑↓✕ or Replace/All) — keeps both fields equal */
+      --helm-trailing-width: 112px;
+      /* secondarySystemFill (approx light / dark) */
+      --helm-field-fill: rgba(120, 120, 128, 0.12);
+      --helm-field-fill-dark: rgba(120, 120, 128, 0.24);
+      --helm-label: rgba(60, 60, 67, 0.6);
+      --helm-label-dark: rgba(235, 235, 245, 0.6);
+      --helm-accent: #007aff;
+      --helm-accent-dark: #0a84ff;
+
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 4px;
+      width: var(--helm-search-width);
+      max-width: calc(100% - 20px);
+      margin: 8px 10px 6px auto;
+      padding: 8px;
+      box-sizing: border-box;
+      border-radius: 12px;
+      border: 1px solid rgba(60, 60, 67, 0.12);
+      background: rgba(255, 255, 255, 0.92);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.1),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      font-size: 15px;
+      color: #1c1c1e;
+    }
+    html[data-helm-scheme="dark"] .helm-search {
+      border-color: rgba(84, 84, 88, 0.65);
+      background: rgba(44, 44, 46, 0.92);
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.45),
+        0 0 0 0.5px rgba(255, 255, 255, 0.06);
+      color: #f5f5f7;
+      --helm-field-fill: var(--helm-field-fill-dark);
+      --helm-label: var(--helm-label-dark);
+      --helm-accent: var(--helm-accent-dark);
+    }
+
+    .helm-search-expand {
+      flex: 0 0 28px;
+      width: 28px;
+      height: var(--helm-field-height);
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--helm-label);
+      font-size: 10px;
+      line-height: 1;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+    .helm-search-expand:hover:not(:disabled) {
+      opacity: 0.7;
+    }
+    .helm-search-expand:active:not(:disabled) {
+      opacity: 0.45;
+    }
+    .helm-search-expand:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .helm-search-body {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /*
+     * Equal-width fields: both rows use the same 2-column grid
+     * (field grows; trailing cluster fixed so Find/Replace shells align).
+     */
+    .helm-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--helm-trailing-width, 108px);
+      align-items: center;
+      column-gap: var(--helm-cluster-gap);
+      height: var(--helm-field-height);
+      min-height: var(--helm-field-height);
+      width: 100%;
+    }
+    .helm-search-row-replace[hidden],
+    .helm-search:not(.is-replace-open) .helm-search-row-replace {
+      display: none !important;
+    }
+    .helm-search.is-replace-open .helm-search-row-replace {
+      display: grid !important;
+      height: var(--helm-field-height);
+    }
+
+    .helm-search-trailing {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 100%;
+      min-width: 0;
+      height: var(--helm-field-height);
+    }
+
+    /*
+     * Shared field shell (Find + Replace) — same capsule + height as SwiftUI
+     * HelmSearchField / helmSearchFieldChrome (36pt capsule).
+     */
+    .helm-search-field-wrap {
+      width: 100%;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--helm-cluster-gap);
+      height: var(--helm-field-height);
+      min-height: var(--helm-field-height);
+      max-height: var(--helm-field-height);
+      padding: 0 var(--helm-field-pad-x);
+      border-radius: var(--helm-field-radius); /* capsule */
+      border: none;
+      background: var(--helm-field-fill);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    /* No extra focus ring — match SwiftUI HelmSearchField (plain secondaryFill). */
+    .helm-search-field-wrap:focus-within {
+      box-shadow: none;
+    }
+
+    .helm-search-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      outline: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      color: inherit;
+      font: inherit;
+      font-size: 15px;
+      line-height: var(--helm-field-height);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .helm-search-input::-webkit-search-decoration,
+    .helm-search-input::-webkit-search-cancel-button {
+      -webkit-appearance: none;
+    }
+    .helm-search-input::placeholder {
+      color: var(--helm-label);
+    }
+
+    .helm-search-actions {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 2px;
+      height: var(--helm-field-height);
+    }
+
+    .helm-search-toggles {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: var(--helm-option-gap);
+      height: 100%;
+    }
+
+    /* Nav / close — slight opacity press (not filled chips) */
+    .helm-search-btn {
+      margin: 0 !important;
+      height: 28px;
+      min-width: 28px;
+      padding: 0 4px !important;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--helm-label);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Find row: larger ↑ ↓ ✕ icons */
+    .helm-search-actions-icons .helm-search-btn {
+      height: 32px;
+      min-width: 32px;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .helm-search-btn:hover {
+      opacity: 0.75;
+    }
+    .helm-search-btn:active {
+      opacity: 0.45;
+    }
+
+    /*
+     * Match SwiftUI SearchMatchOptionLabel (.plain):
+     * monospaced caption, secondary / accent text only — no hover fill.
+     */
+    .helm-search-toggle {
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none;
+      border-radius: 0;
+      background: transparent !important;
+      color: var(--helm-label);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      min-width: 0;
+      height: auto;
+    }
+    .helm-search-toggle:hover {
+      background: transparent !important;
+      opacity: 0.85;
+    }
+    .helm-search-toggle:active {
+      background: transparent !important;
+      opacity: 0.45;
+    }
+    .helm-search-toggle.is-on {
+      color: var(--helm-accent);
+      background: transparent !important;
+      opacity: 1;
+    }
+    .helm-search-toggle.is-on:active {
+      opacity: 0.55;
+    }
+
+    .helm-search-btn-text {
+      min-width: 0;
+      padding: 0 8px !important;
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--helm-accent);
+    }
+    .helm-search-btn-text:hover {
+      opacity: 0.8;
+    }
+
+    /* Match highlights */
+    .cm-searchMatch {
+      background-color: rgba(255, 204, 0, 0.4) !important;
+      border-radius: 2px;
+    }
+    html[data-helm-scheme="dark"] .cm-searchMatch {
+      background-color: rgba(255, 204, 0, 0.28) !important;
+    }
+    .cm-searchMatch-selected {
+      background-color: rgba(255, 149, 0, 0.5) !important;
+    }
+    html[data-helm-scheme="dark"] .cm-searchMatch-selected {
+      background-color: rgba(255, 159, 10, 0.4) !important;
+    }
   </style>
 </head>
 <body>

@@ -121,6 +121,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
         }
 
         func run(_ command: CodeMirrorCommand) {
+            // Hardware ⌘F lands here via UIKeyCommand (system often swallows it before JS).
             evaluate(CodeMirrorBundle.runCommandJavaScript(command))
         }
 

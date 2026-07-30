@@ -85,15 +85,9 @@ struct SidebarBookmarksView: View {
     }
 
     private var emptyPlaceholder: some View {
-        VStack(spacing: 6) {
-            Text("No Bookmarks")
-                .font(.headline)
-            Text("Bookmark a file from the Files context menu, or a line in the editor with ⌘ F2.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        SidebarEmptyPlaceholder(
+            title: "No Bookmarks",
+            subtitle: "Bookmark a file from the Files context menu, or a line in the editor with ⌘ F2."
+        )
     }
 }

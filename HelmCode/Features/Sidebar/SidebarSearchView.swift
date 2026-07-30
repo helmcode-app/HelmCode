@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  Project-wide search navigator (Xcode / VS Code Find in Workspace).
-//  Match Case / Whole Word are clickable labels inside the search field.
+//  Field chrome: Shared/UI/HelmSearchFieldChrome.swift
 //
 
 import SwiftUI
@@ -19,12 +19,6 @@ struct SidebarSearchView: View {
     @State private var hasSearched = false
 
     private enum Metrics {
-        /// Magnifying glass ↔ field ↔ option cluster.
-        static let fieldClusterSpacing: CGFloat = 4
-        /// Aa ↔ W ↔ clear (and W → trailing edge via padding).
-        static let optionSpacing: CGFloat = 6
-        static let fieldHorizontalPadding: CGFloat = 8
-        static let fieldVerticalPadding: CGFloat = 6
         static let headerHorizontalPadding: CGFloat = 10
         static let searchDebounceNanoseconds: UInt64 = 180_000_000
     }
@@ -33,11 +27,8 @@ struct SidebarSearchView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var matchCount: Int {
-        groups.reduce(0) { $0 + $1.matches.count }
-    }
-
     private var resultSummary: String {
+        let matchCount = groups.reduce(0) { $0 + $1.matches.count }
         if matchCount == 0 { return "No results" }
         let fileWord = groups.count == 1 ? "file" : "files"
         let matchWord = matchCount == 1 ? "result" : "results"
@@ -59,7 +50,17 @@ struct SidebarSearchView: View {
 
     private var searchHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
-            searchField
+            HelmSearchField(text: $query, placeholder: "Search", onSubmit: runSearch) {
+                HStack(spacing: HelmSearchFieldMetrics.optionSpacing) {
+                    SearchMatchOptionCluster(
+                        caseSensitive: $caseSensitive,
+                        matchWholeWord: $matchWholeWord
+                    )
+                    if !query.isEmpty {
+                        clearButton
+                    }
+                }
+            }
             if hasSearched, !trimmedQuery.isEmpty {
                 Text(resultSummary)
                     .font(.caption2)
@@ -73,39 +74,8 @@ struct SidebarSearchView: View {
         .padding(.bottom, 6)
     }
 
-    private var searchField: some View {
-        HStack(spacing: Metrics.fieldClusterSpacing) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-
-            TextField("Search", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .onSubmit { runSearch() }
-
-            HStack(spacing: Metrics.optionSpacing) {
-                SearchMatchOptionLabel(title: "Aa", help: "Match Case", isOn: $caseSensitive)
-                SearchMatchOptionLabel(title: "W", help: "Match Whole Word", isOn: $matchWholeWord)
-                if !query.isEmpty {
-                    clearButton
-                }
-            }
-        }
-        .padding(.horizontal, Metrics.fieldHorizontalPadding)
-        .padding(.vertical, Metrics.fieldVerticalPadding)
-        .background(
-            Color(.secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-    }
-
     private var clearButton: some View {
-        Button {
-            query = ""
-            groups = []
-            hasSearched = false
-        } label: {
+        Button(action: clearSearch) {
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.secondary)
         }
@@ -118,12 +88,12 @@ struct SidebarSearchView: View {
     @ViewBuilder
     private var resultsList: some View {
         if trimmedQuery.isEmpty {
-            emptyState(
+            SidebarEmptyPlaceholder(
                 title: "Search in Project",
                 subtitle: "Find text across files in \(project.name)."
             )
         } else if hasSearched, groups.isEmpty {
-            emptyState(
+            SidebarEmptyPlaceholder(
                 title: "No Results",
                 subtitle: "No matches for “\(trimmedQuery)”."
             )
@@ -176,20 +146,13 @@ struct SidebarSearchView: View {
         .contentShape(Rectangle())
     }
 
-    private func emptyState(title: String, subtitle: String) -> some View {
-        VStack(spacing: 6) {
-            Text(title)
-                .font(.headline)
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     // MARK: - Search
+
+    private func clearSearch() {
+        query = ""
+        groups = []
+        hasSearched = false
+    }
 
     private func scheduleSearch() {
         let snapshot = query
@@ -213,28 +176,5 @@ struct SidebarSearchView: View {
             matchWholeWord: matchWholeWord
         )
         hasSearched = true
-    }
-}
-
-// MARK: - Match option label
-
-/// Clickable text (not a bordered button): accent when on, secondary when off.
-private struct SearchMatchOptionLabel: View {
-    let title: String
-    let help: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button {
-            isOn.toggle()
-        } label: {
-            Text(title)
-                .font(.caption.weight(.semibold).monospaced())
-                .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(help)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

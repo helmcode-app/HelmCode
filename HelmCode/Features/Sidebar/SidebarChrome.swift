@@ -2,10 +2,13 @@
 //  SidebarChrome.swift
 //  HelmCode
 //
-//  Shared sidebar chrome: list style, scroll-edge fade, system bottom settings bar.
+//  Shared sidebar chrome: list style, scroll-edge fade, empty placeholders,
+//  and the system bottom settings bar.
 //
 
 import SwiftUI
+
+// MARK: - List / edge chrome
 
 extension View {
     /// Sidebar list + soft bottom scroll-edge effect (pairs with `safeAreaBar`).
@@ -20,6 +23,29 @@ extension View {
             .scrollEdgeEffectStyle(.soft, for: .bottom)
     }
 }
+
+// MARK: - Empty navigator
+
+/// Centered title + subtitle for empty Search / Bookmarks / etc. (no icon).
+struct SidebarEmptyPlaceholder: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title)
+                .font(.headline)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Settings bar
 
 /// Settings row in the system bottom safe-area bar.
 /// Uses a sidebar `List` so leading inset / body metrics match navigator lists.

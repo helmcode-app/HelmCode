@@ -14,6 +14,9 @@ enum CodeMirrorCommand: String, CaseIterable, Sendable {
     case toggleBookmark
     case selectLine
     case find
+    case findReplace
+    case findNext
+    case findPrevious
     case indentMore
     case indentLess
     case deleteLine
