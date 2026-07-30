@@ -22,6 +22,21 @@ In-app reference: **Settings → About → Keyboard Shortcuts**
 
 Core bindings (editor focused): font zoom `⌘+/-/0`, undo/redo, find, comment, indent, move/delete line, fold, etc. Plus CodeMirror defaults.
 
+**Line bookmarks (Xcode-style):** `⌘ F2` / `⌘ ⌥ B` toggles the caret line; click the bookmark gutter to toggle that line. Host APIs: `setBookmarks([line…])`, `goToLine(n)`. Markers are filled bookmark SVG icons (color in `index.html`, not a CM color theme).
+
+## System context menu (custom entries)
+
+`CodeMirrorWebView` keeps the **system** edit/context menu and appends:
+
+| Action | Command id |
+|--------|------------|
+| Toggle Comment | `toggleComment` |
+| Toggle Bookmark | `toggleBookmark` |
+| Select Line | `selectLine` |
+| Find | `find` |
+
+Implemented only via `buildMenu(with:)` on `CodeMirrorWebView` (no `UIMenuItem` — that duplicated entries under Share). Menu specs live in `CodeMirrorCommand.contextMenuItems`; actions call `HelmCodeEditor.runCommand(...)`.
+
 ## Rebuild
 
 From the repo root (Node 20+):

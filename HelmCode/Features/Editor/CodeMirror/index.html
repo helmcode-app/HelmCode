@@ -42,6 +42,32 @@
     html[data-helm-scheme="dark"] .cm-activeLineGutter {
       background-color: rgba(255, 255, 255, 0.12) !important;
     }
+
+    /* Line bookmarks: filled bookmark icon in the gutter (not a CM color theme). */
+    .cm-bookmark-gutter {
+      width: 14px;
+      min-width: 14px;
+    }
+    .cm-bookmark-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 100%;
+      min-height: 1.2em;
+      margin: 0 auto;
+      color: #0a84ff; /* light: system blue */
+      pointer-events: none;
+    }
+    .cm-bookmark-icon {
+      display: block;
+      width: 11px;
+      height: 11px;
+      flex-shrink: 0;
+    }
+    html[data-helm-scheme="dark"] .cm-bookmark-mark {
+      color: #64d2ff; /* dark: lighter system blue */
+    }
   </style>
 </head>
 <body>

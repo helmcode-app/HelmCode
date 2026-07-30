@@ -59,6 +59,11 @@ enum EditorKeyboardShortcutsCatalog {
             .init(keys: "⌘ ↑  /  ⌘ ↓", action: "Document start / end"),
             .init(keys: "Esc", action: "Clear selection / close find"),
         ]),
+        EditorShortcutSection(title: "Bookmarks", items: [
+            .init(keys: "⌘ F2", action: "Toggle bookmark on current line"),
+            .init(keys: "⌘ ⌥ B", action: "Toggle bookmark on current line"),
+            .init(keys: "Gutter click", action: "Toggle bookmark on that line"),
+        ]),
         EditorShortcutSection(title: "Find & Fold", items: [
             .init(keys: "⌘ F", action: "Find"),
             .init(keys: "⌘ ⌥ [  /  ⌘ ⌥ ]", action: "Fold / unfold all"),

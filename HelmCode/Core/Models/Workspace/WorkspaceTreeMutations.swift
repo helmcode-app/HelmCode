@@ -175,7 +175,8 @@ extension WorkspaceNode {
 
     // MARK: - Internals
 
-    private static func browserOrder(_ a: WorkspaceNode, _ b: WorkspaceNode) -> Bool {
+    /// Folder-first, then name — `nonisolated` so pure tree sorts stay off MainActor.
+    nonisolated private static func browserOrder(_ a: WorkspaceNode, _ b: WorkspaceNode) -> Bool {
         if a.isDirectory != b.isDirectory { return a.isDirectory && !b.isDirectory }
         return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
     }

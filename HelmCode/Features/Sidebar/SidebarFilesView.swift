@@ -3,6 +3,8 @@
 //  HelmCode
 //
 //  Files navigator: outline tree + context-menu file operations.
+//  Context menu Bookmark = whole file/folder (original). No trailing badge icon.
+//  Line bookmarks are added from the editor only.
 //
 
 import SwiftUI
@@ -23,31 +25,28 @@ struct SidebarFilesView: View {
 
     private func fileRow(_ node: WorkspaceNode) -> some View {
         let isSelected = session.selectedFileID == node.id
-        return Label {
-            HStack(spacing: 6) {
-                Text(node.name)
-                    .lineLimit(1)
-                if session.isBookmarked(node.id) {
-                    Image(systemName: "bookmark.fill")
-                        .font(.caption2)
-                        .foregroundStyle(isSelected ? Color.white : Color.accentColor)
-                }
-            }
-        } icon: {
+        return HStack(spacing: 8) {
             Image(systemName: node.systemImage)
-                .foregroundStyle(Self.iconColor(for: node, isSelected: isSelected))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(
+                    isSelected ? Color.primary : WorkspaceNodeIconStyle.color(for: node)
+                )
+                .frame(width: 20, alignment: .center)
+
+            Text(node.name)
+                .lineLimit(1)
+                .foregroundStyle(Color.primary)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .listItemTint(.primary)
         .tag(node.id)
         .accessibilityLabel(node.path)
         .contextMenu {
             fileContextMenu(node)
         }
-    }
-
-    /// Directory icons use accent blue when idle; selection chrome is also blue, so flip to white when selected.
-    private static func iconColor(for node: WorkspaceNode, isSelected: Bool) -> Color {
-        if isSelected { return .white }
-        return node.isDirectory ? Color.accentColor : Color.secondary
     }
 
     @ViewBuilder
@@ -81,11 +80,11 @@ struct SidebarFilesView: View {
         }
 
         Button {
-            session.toggleBookmark(nodeID: node.id)
+            session.toggleFileBookmark(nodeID: node.id)
         } label: {
             Label(
-                session.isBookmarked(node.id) ? "Remove Bookmark" : "Bookmark",
-                systemImage: session.isBookmarked(node.id) ? "bookmark.slash" : "bookmark"
+                session.isFileBookmarked(node.id) ? "Remove Bookmark" : "Bookmark",
+                systemImage: session.isFileBookmarked(node.id) ? "bookmark.slash" : "bookmark"
             )
         }
 

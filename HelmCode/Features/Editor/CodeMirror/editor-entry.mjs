@@ -6,7 +6,7 @@
  *  2. Dark active-line wash is plain CSS on html[data-helm-scheme] (index.html), not a CM theme.
  *  3. Font-size uses a Compartment (not a theme after oneDark).
  */
-import { EditorState, Compartment } from "@codemirror/state"
+import { EditorState, Compartment, StateField, StateEffect, RangeSet } from "@codemirror/state"
 import {
   EditorView,
   keymap,
@@ -18,6 +18,8 @@ import {
   rectangularSelection,
   crosshairCursor,
   highlightActiveLine,
+  GutterMarker,
+  gutter,
 } from "@codemirror/view"
 import {
   defaultKeymap,
@@ -171,6 +173,104 @@ function setShellScheme(dark) {
   document.documentElement.dataset.helmScheme = dark ? "dark" : "light"
 }
 
+// MARK: Line bookmarks (Xcode-style)
+
+const setBookmarksEffect = StateEffect.define()
+
+const bookmarkMarker = new (class extends GutterMarker {
+  toDOM() {
+    const el = document.createElement("div")
+    el.className = "cm-bookmark-mark"
+    el.title = "Bookmark"
+    el.setAttribute("aria-label", "Bookmark")
+    // Filled bookmark glyph (SF Symbol–like), color via CSS `currentColor`.
+    el.innerHTML =
+      '<svg class="cm-bookmark-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">' +
+      '<path fill="currentColor" d="M3.5 1.5A1.5 1.5 0 0 1 5 0h6a1.5 1.5 0 0 1 1.5 1.5v13.1a.75.75 0 0 1-1.16.63L8 12.35l-3.34 2.88A.75.75 0 0 1 3.5 14.6Z"/>' +
+      "</svg>"
+    return el
+  }
+})()
+
+const bookmarkField = StateField.define({
+  create() {
+    return RangeSet.empty
+  },
+  update(set, tr) {
+    set = set.map(tr.changes)
+    for (const e of tr.effects) {
+      if (e.is(setBookmarksEffect)) set = e.value
+    }
+    return set
+  },
+})
+
+function bookmarksFromLines(state, lines) {
+  const marks = []
+  const max = state.doc.lines
+  const unique = [...new Set((lines || []).map((n) => Math.floor(Number(n))).filter((n) => n >= 1 && n <= max))]
+  unique.sort((a, b) => a - b)
+  for (const n of unique) {
+    const line = state.doc.line(n)
+    marks.push(bookmarkMarker.range(line.from))
+  }
+  return RangeSet.of(marks, true)
+}
+
+function applyBookmarkLines(view, lines) {
+  view.dispatch({
+    effects: setBookmarksEffect.of(bookmarksFromLines(view.state, lines)),
+  })
+}
+
+function postToggleBookmark(line, lineText) {
+  try {
+    window.webkit?.messageHandlers?.helmEditor?.postMessage({
+      type: "toggleBookmark",
+      line,
+      lineText: lineText || "",
+    })
+  } catch (_) {}
+}
+
+/** Ask host to toggle; host pushes updated markers via setBookmarks. */
+function requestToggleBookmarkAt(view, lineNumber) {
+  const line = view.state.doc.line(lineNumber)
+  postToggleBookmark(line.number, line.text)
+  return true
+}
+
+function toggleBookmarkAtCursor(view) {
+  // Multi-line selection: bookmark the first line (range start), not the caret/head.
+  const { from, to } = view.state.selection.main
+  const line = view.state.doc.lineAt(Math.min(from, to))
+  return requestToggleBookmarkAt(view, line.number)
+}
+
+function bookmarkGutter() {
+  return gutter({
+    class: "cm-bookmark-gutter",
+    markers: (v) => v.state.field(bookmarkField),
+    initialSpacer: () => bookmarkMarker,
+    domEventHandlers: {
+      mousedown(view, line) {
+        requestToggleBookmarkAt(view, line.number)
+        return true
+      },
+    },
+  })
+}
+
+function goToLine(view, lineNumber) {
+  const n = Math.min(Math.max(1, Math.floor(Number(lineNumber) || 1)), view.state.doc.lines)
+  const line = view.state.doc.line(n)
+  view.dispatch({
+    selection: { anchor: line.from },
+    effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+  })
+  view.focus()
+}
+
 // MARK: Keymaps
 
 /**
@@ -185,6 +285,10 @@ function helmEditorKeymap() {
     { key: "Mod--", run: (v) => bumpFontSize(v, -1), preventDefault: true },
     { key: "Mod-_", run: (v) => bumpFontSize(v, -1), preventDefault: true },
     { key: "Mod-0", run: (v) => setFontSize(v, FONT_DEFAULT), preventDefault: true },
+
+    // Line bookmark (Xcode-style navigator)
+    { key: "Mod-F2", run: toggleBookmarkAtCursor, preventDefault: true },
+    { key: "Mod-Alt-b", run: toggleBookmarkAtCursor, preventDefault: true },
 
     // Common edit / structure (also in defaultKeymap; listed for explicit Mac IDE parity)
     { key: "Mod-a", run: selectAll },
@@ -232,6 +336,8 @@ function editorKeymap() {
 function makeExtensions({ language, dark, readOnly }) {
   const exts = [
     lineNumbers(),
+    bookmarkField,
+    bookmarkGutter(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),
@@ -300,11 +406,17 @@ function boot() {
     new ResizeObserver(() => view?.requestMeasure()).observe(root)
   }
 
+  /** Last bookmark lines from host; re-applied after setDocument rebuilds state. */
+  let lastBookmarkLines = []
+
   window.HelmCodeEditor = {
-    setDocument({ text, language, dark, readOnly }) {
+    setDocument({ text, language, dark, readOnly, bookmarks }) {
       if (!view) return
       const isDark = !!dark
       setShellScheme(isDark)
+      if (Array.isArray(bookmarks)) {
+        lastBookmarkLines = bookmarks
+      }
       view.setState(
         EditorState.create({
           doc: typeof text === "string" ? text : "",
@@ -315,7 +427,17 @@ function boot() {
           }),
         }),
       )
+      applyBookmarkLines(view, lastBookmarkLines)
       requestAnimationFrame(() => view.requestMeasure())
+    },
+    setBookmarks(lines) {
+      if (!view) return
+      lastBookmarkLines = Array.isArray(lines) ? lines : []
+      applyBookmarkLines(view, lastBookmarkLines)
+    },
+    goToLine(line) {
+      if (!view) return
+      goToLine(view, line)
     },
     relayout() {
       view?.requestMeasure()
@@ -333,6 +455,31 @@ function boot() {
     },
     focus() {
       view?.focus()
+    },
+    /**
+     * Run a named command from the host (system edit-menu custom actions).
+     * Returns true when the command was applied.
+     */
+    runCommand(name) {
+      if (!view) return false
+      switch (String(name || "")) {
+        case "toggleComment":
+          return !!toggleComment(view)
+        case "toggleBookmark":
+          return !!toggleBookmarkAtCursor(view)
+        case "selectLine":
+          return !!selectLine(view)
+        case "find":
+          return !!openSearchPanel(view)
+        case "indentMore":
+          return !!indentMore(view)
+        case "indentLess":
+          return !!indentLess(view)
+        case "deleteLine":
+          return !!deleteLine(view)
+        default:
+          return false
+      }
     },
   }
 

@@ -39,4 +39,21 @@ enum CodeMirrorBundle {
     static var relayoutJavaScript: String {
         "\(jsGlobal) && \(jsGlobal).relayout && \(jsGlobal).relayout();"
     }
+
+    /// `lines` is a JSON array of 1-based line numbers, e.g. `[3,12]`.
+    static func setBookmarksJavaScript(linesJSONArray: String) -> String {
+        "\(jsGlobal) && \(jsGlobal).setBookmarks && \(jsGlobal).setBookmarks(\(linesJSONArray));"
+    }
+
+    static func goToLineJavaScript(_ line: Int) -> String {
+        "\(jsGlobal) && \(jsGlobal).goToLine && \(jsGlobal).goToLine(\(line));"
+    }
+
+    /// Run a named editor command (system context-menu / host actions).
+    static func runCommandJavaScript(_ command: CodeMirrorCommand) -> String {
+        let escaped = command.rawValue
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        return "\(jsGlobal) && \(jsGlobal).runCommand && \(jsGlobal).runCommand('\(escaped)');"
+    }
 }

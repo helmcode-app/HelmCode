@@ -2,7 +2,8 @@
 //  SidebarBookmarksView.swift
 //  HelmCode
 //
-//  Bookmarks navigator for the open project.
+//  Bookmarks navigator: whole-file/folder marks + line marks.
+//  Leading icon is always the file/folder type icon (not a generic bookmark).
 //
 
 import SwiftUI
@@ -19,27 +20,24 @@ struct SidebarBookmarksView: View {
             List {
                 ForEach(items, id: \.bookmark.id) { item in
                     Button {
-                        session.openFile(item.node.id)
+                        session.openBookmark(item.bookmark)
                     } label: {
                         Label {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(item.node.name)
-                                    .lineLimit(1)
-                                Text(item.node.path)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                            bookmarkLabel(item.bookmark, node: item.node)
                         } icon: {
-                            Image(systemName: "bookmark.fill")
-                                .foregroundStyle(Color.accentColor)
+                            Image(systemName: item.node.systemImage)
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(WorkspaceNodeIconStyle.color(for: item.node))
                         }
                     }
                     .contextMenu {
                         Button {
-                            session.openFile(item.node.id)
+                            session.openBookmark(item.bookmark)
                         } label: {
-                            Label("Open", systemImage: "doc")
+                            Label(
+                                item.bookmark.isLineBookmark ? "Jump to Line" : "Open",
+                                systemImage: "arrow.right.circle"
+                            )
                         }
                         Button(role: .destructive) {
                             session.removeBookmark(item.bookmark)
@@ -53,12 +51,44 @@ struct SidebarBookmarksView: View {
         }
     }
 
-    /// No icon; title + subtitle centered in the navigator area.
+    @ViewBuilder
+    private func bookmarkLabel(_ bookmark: WorkspaceBookmark, node: WorkspaceNode) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let line = bookmark.line {
+                HStack(spacing: 6) {
+                    Text(node.name)
+                        .lineLimit(1)
+                    Text(":\(line)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                if let snippet = bookmark.lineText, !snippet.isEmpty {
+                    Text(snippet)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(node.path)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } else {
+                Text(node.name)
+                    .lineLimit(1)
+                Text(node.path)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
     private var emptyPlaceholder: some View {
         VStack(spacing: 6) {
             Text("No Bookmarks")
                 .font(.headline)
-            Text("Bookmark files from the Files navigator context menu.")
+            Text("Bookmark a file from the Files context menu, or a line in the editor with ⌘ F2.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

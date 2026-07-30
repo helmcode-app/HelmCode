@@ -11,7 +11,7 @@ HelmCode/
 │   ├── Models/          # API + workspace domain types
 │   ├── Network/         # RunnerCoreAPIClient + HelmCodeNetworkEngine
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
-│   └── Session/         # WorkspaceSession (project / file / recents)
+│   └── Session/         # WorkspaceSession (+ Tree / Bookmarks / SCM)
 ├── Features/
 │   ├── Sidebar/         # Projects · navigator tabs (Files / Bookmarks / SCM)
 │   ├── Editor/          # Welcome · empty project · CodeMirror canvas
@@ -49,10 +49,11 @@ HelmCode/
 | State | Content |
 |-------|---------|
 | No project | **Projects** list |
-| Project open | System segmented **navigator**: Files · Bookmarks · Source Control |
+| Project open | System segmented **navigator**: Files · Search · Bookmarks · Source Control |
 
-- **Files** — outline tree; create / rename / delete / bookmark via context menu  
-- **Bookmarks** — saved nodes; empty state is text-only, centered  
+- **Files** — outline tree; create / rename / delete / file bookmark via context menu  
+- **Search** — find in project (case / whole-word); open match jumps to line  
+- **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
 - Project switching lives in the **center toolbar** (not the sidebar)
 

@@ -4,7 +4,7 @@
 //
 //  NavigationSplitView sidebar shell:
 //  • No project — Projects list
-//  • Project open — Xcode-style navigator tabs (Files / Bookmarks / SCM)
+//  • Project open — Xcode-style navigator tabs (Files / Search / Bookmarks / SCM)
 //
 
 import SwiftUI
@@ -94,6 +94,8 @@ struct SidebarView: View {
                 project: project,
                 onPresentDialog: present(_:)
             )
+        case .search:
+            SidebarSearchView(session: session, project: project)
         case .bookmarks:
             SidebarBookmarksView(session: session)
         case .sourceControl:

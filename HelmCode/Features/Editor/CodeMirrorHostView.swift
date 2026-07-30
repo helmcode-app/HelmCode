@@ -2,7 +2,7 @@
 //  CodeMirrorHostView.swift
 //  HelmCode
 //
-//  WKWebView host for the offline CodeMirror 6 bundle.
+//  SwiftUI host for the offline CodeMirror 6 bundle (document, bookmarks, commands).
 //
 
 import SwiftUI
@@ -13,47 +13,38 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var language: CodeMirrorLanguage
     var isDark: Bool
     var isEditable: Bool = true
+    /// 1-based bookmarked lines for the open file.
+    var bookmarkLines: [Int] = []
+    /// When non-nil, scroll/select this line after the next document push.
+    var revealLine: Int? = nil
+    /// Changes when a new reveal is requested (even for the same line).
+    var revealGeneration: Int = 0
+    var onToggleBookmark: ((Int, String) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> CodeMirrorWebView {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         config.userContentController.add(context.coordinator, name: CodeMirrorBundle.messageHandlerName)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = CodeMirrorWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.keyboardDismissMode = .interactive
-        // Soft-wrap is inside CM; outer scroller is vertical-only.
-        webView.scrollView.alwaysBounceHorizontal = false
-        webView.scrollView.isDirectionalLockEnabled = true
-        webView.scrollView.showsHorizontalScrollIndicator = false
-        webView.scrollView.bounces = true
-        #if DEBUG
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true
-        }
-        #endif
-
-        context.coordinator.webView = webView
-        context.coordinator.loadEditor(into: webView)
+        context.coordinator.bind(webView)
+        context.coordinator.loadEditor()
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    func updateUIView(_ webView: CodeMirrorWebView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.pushDocumentIfNeeded()
-        // Soft-wrap remeasures when inspector open/resize changes host width.
-        context.coordinator.requestRelayout()
+        context.coordinator.bind(webView)
+        context.coordinator.syncToWebView()
     }
 
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+    static func dismantleUIView(_ uiView: CodeMirrorWebView, coordinator: Coordinator) {
+        uiView.onCustomCommand = nil
         uiView.configuration.userContentController
             .removeScriptMessageHandler(forName: CodeMirrorBundle.messageHandlerName)
     }
@@ -62,21 +53,38 @@ struct CodeMirrorHostView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: CodeMirrorHostView
-        weak var webView: WKWebView?
+        weak var webView: CodeMirrorWebView?
 
         private var isReady = false
         private var lastPayloadKey: String?
+        private var lastBookmarkKey: String?
+        private var lastRevealedLineToken: String?
 
         init(parent: CodeMirrorHostView) {
             self.parent = parent
         }
 
-        func loadEditor(into webView: WKWebView) {
+        func bind(_ webView: CodeMirrorWebView) {
+            self.webView = webView
+            webView.onCustomCommand = { [weak self] command in
+                self?.run(command)
+            }
+        }
+
+        func loadEditor() {
+            guard let webView else { return }
             guard let url = CodeMirrorBundle.indexHTMLURL() else {
                 assertionFailure("CodeMirror index.html missing from app bundle")
                 return
             }
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+
+        func syncToWebView() {
+            pushDocumentIfNeeded()
+            pushBookmarksIfNeeded()
+            revealLineIfNeeded()
+            requestRelayout()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -92,47 +100,96 @@ struct CodeMirrorHostView: UIViewRepresentable {
             didReceive message: WKScriptMessage
         ) {
             guard message.name == CodeMirrorBundle.messageHandlerName else { return }
-            if let body = message.body as? [String: Any],
-               let type = body["type"] as? String,
-               type == "ready" {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else { return }
+
+            switch type {
+            case "ready":
                 markReady()
+            case "toggleBookmark":
+                let line = body["line"] as? Int
+                    ?? (body["line"] as? Double).map { Int($0) }
+                    ?? 0
+                let lineText = body["lineText"] as? String ?? ""
+                guard line >= 1 else { return }
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.onToggleBookmark?(line, lineText)
+                }
+            default:
+                break
             }
+        }
+
+        func run(_ command: CodeMirrorCommand) {
+            evaluate(CodeMirrorBundle.runCommandJavaScript(command))
         }
 
         private func markReady() {
             isReady = true
             lastPayloadKey = nil
-            pushDocumentIfNeeded()
+            lastBookmarkKey = nil
+            lastRevealedLineToken = nil
+            syncToWebView()
         }
 
-        func pushDocumentIfNeeded() {
-            guard isReady, let webView else { return }
+        private func pushDocumentIfNeeded() {
+            guard isReady else { return }
 
             let key = documentKey
             guard key != lastPayloadKey else { return }
             lastPayloadKey = key
+            // Document rebuild clears gutter; re-push bookmarks next.
+            lastBookmarkKey = nil
 
             let payload: [String: Any] = [
                 "text": parent.text,
                 "language": parent.language.rawValue,
                 "dark": parent.isDark,
                 "readOnly": !parent.isEditable,
+                "bookmarks": parent.bookmarkLines,
             ]
+            guard let json = Self.jsonString(payload) else { return }
 
-            guard
-                let data = try? JSONSerialization.data(withJSONObject: payload),
-                let json = String(data: data, encoding: .utf8)
-            else { return }
-
-            webView.evaluateJavaScript(
-                CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json),
-                completionHandler: nil
-            )
+            evaluate(CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json)) { [weak self] in
+                self?.lastBookmarkKey = self?.bookmarkKey
+                self?.revealLineIfNeeded()
+            }
         }
 
-        func requestRelayout() {
-            guard isReady, let webView else { return }
-            webView.evaluateJavaScript(CodeMirrorBundle.relayoutJavaScript, completionHandler: nil)
+        private func pushBookmarksIfNeeded() {
+            guard isReady else { return }
+            let key = bookmarkKey
+            guard key != lastBookmarkKey else { return }
+            lastBookmarkKey = key
+            guard let json = Self.jsonString(parent.bookmarkLines) else { return }
+            evaluate(CodeMirrorBundle.setBookmarksJavaScript(linesJSONArray: json))
+        }
+
+        private func revealLineIfNeeded() {
+            guard isReady, let line = parent.revealLine, line >= 1 else { return }
+            let token = "\(documentKey)|\(line)|\(parent.revealGeneration)"
+            guard token != lastRevealedLineToken else { return }
+            lastRevealedLineToken = token
+
+            // After setDocument, wait a frame so layout/line map is ready.
+            DispatchQueue.main.async { [weak self] in
+                self?.evaluate(CodeMirrorBundle.goToLineJavaScript(line))
+            }
+        }
+
+        private func requestRelayout() {
+            guard isReady else { return }
+            evaluate(CodeMirrorBundle.relayoutJavaScript)
+        }
+
+        private func evaluate(_ script: String, completion: (() -> Void)? = nil) {
+            guard let webView else {
+                completion?()
+                return
+            }
+            webView.evaluateJavaScript(script) { _, _ in
+                completion?()
+            }
         }
 
         private var documentKey: String {
@@ -142,6 +199,17 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 parent.isEditable ? "e" : "r",
                 parent.text,
             ].joined(separator: "\u{1e}")
+        }
+
+        private var bookmarkKey: String {
+            parent.bookmarkLines.map(String.init).joined(separator: ",")
+        }
+
+        private static func jsonString(_ value: Any) -> String? {
+            guard JSONSerialization.isValidJSONObject(value),
+                  let data = try? JSONSerialization.data(withJSONObject: value),
+                  let json = String(data: data, encoding: .utf8) else { return nil }
+            return json
         }
     }
 }

@@ -2,7 +2,7 @@
 //  EditorCanvasView.swift
 //  HelmCode
 //
-//  Code canvas: CodeMirror 6 host + status strip.
+//  Code canvas: CodeMirror 6 host + status strip + line bookmarks.
 //
 
 import SwiftUI
@@ -13,13 +13,22 @@ import UIKit
 struct EditorCanvasView: View {
     let project: WorkspaceProject
     let file: WorkspaceNode
+    @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var buffer: String = ""
+    /// Line to reveal once after load / bookmark open (consumed from session).
+    @State private var revealLine: Int?
+    /// Bumps so the host re-runs goToLine for the same line if needed.
+    @State private var revealGeneration: Int = 0
 
     private var language: CodeMirrorLanguage {
         CodeMirrorLanguage(languageHint: file.languageHint)
+    }
+
+    private var bookmarkLines: [Int] {
+        session.bookmarkedLines(in: file.id)
     }
 
     var body: some View {
@@ -28,7 +37,13 @@ struct EditorCanvasView: View {
                 text: buffer,
                 language: language,
                 isDark: colorScheme == .dark,
-                isEditable: true
+                isEditable: true,
+                bookmarkLines: bookmarkLines,
+                revealLine: revealLine,
+                revealGeneration: revealGeneration,
+                onToggleBookmark: { line, text in
+                    session.toggleLineBookmark(nodeID: file.id, line: line, lineText: text)
+                }
             )
             .padding(.horizontal, LayoutMetrics.editorHorizontalInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,9 +52,21 @@ struct EditorCanvasView: View {
             statusBar
         }
         .background(Color(.systemBackground))
-        .onChange(of: file.id) { _, _ in reloadBuffer() }
-        .onChange(of: project.id) { _, _ in reloadBuffer() }
-        .onAppear { reloadBuffer() }
+        .onChange(of: file.id) { _, _ in
+            reloadBuffer()
+            takePendingReveal()
+        }
+        .onChange(of: project.id) { _, _ in
+            reloadBuffer()
+            takePendingReveal()
+        }
+        .onChange(of: session.pendingEditorRevealLine) { _, _ in
+            takePendingReveal()
+        }
+        .onAppear {
+            reloadBuffer()
+            takePendingReveal()
+        }
     }
 
     // MARK: - Status
@@ -72,5 +99,12 @@ struct EditorCanvasView: View {
             return
         }
         buffer = EditorSampleLibrary.content(for: file.path, project: project.name)
+    }
+
+    private func takePendingReveal() {
+        if let line = session.consumePendingRevealLine() {
+            revealLine = line
+            revealGeneration &+= 1
+        }
     }
 }

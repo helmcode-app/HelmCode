@@ -41,9 +41,9 @@ struct EditorDetailView: View {
         case .welcome:
             EditorWelcomeView(session: session, onOpenSettings: onOpenSettings)
         case .emptyProject(let project):
-            EditorEmptyStateView(project: project, onOpenFile: session.openFile)
+            EditorEmptyStateView(project: project, onOpenFile: { session.openFile($0) })
         case .editing(let project, let file):
-            EditorCanvasView(project: project, file: file, engine: engine)
+            EditorCanvasView(project: project, file: file, session: session, engine: engine)
         }
     }
 
