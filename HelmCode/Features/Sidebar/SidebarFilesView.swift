@@ -20,7 +20,7 @@ struct SidebarFilesView: View {
                 fileRow(node)
             }
         }
-        .listStyle(.sidebar)
+        .helmSidebarListStyle()
     }
 
     private func fileRow(_ node: WorkspaceNode) -> some View {

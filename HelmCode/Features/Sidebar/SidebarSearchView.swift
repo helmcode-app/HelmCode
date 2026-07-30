@@ -132,7 +132,7 @@ struct SidebarSearchView: View {
                     }
                 }
             }
-            .listStyle(.sidebar)
+            .helmSidebarListStyle()
         }
     }
 

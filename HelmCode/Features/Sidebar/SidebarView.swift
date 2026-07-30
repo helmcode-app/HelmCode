@@ -4,7 +4,8 @@
 //
 //  NavigationSplitView sidebar shell:
 //  • No project — Projects list
-//  • Project open — Xcode-style navigator tabs (Files / Search / Bookmarks / SCM)
+//  • Project open — navigator tabs (Files / Search / Bookmarks / SCM)
+//  • Bottom — system safeAreaBar Settings row
 //
 
 import SwiftUI
@@ -38,8 +39,8 @@ struct SidebarView: View {
                 projectsList
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            settingsDock
+        .helmSidebarBottomChrome {
+            SidebarSettingsBar(action: onOpenSettings)
         }
         .alert(dialog?.title ?? "", isPresented: dialogPresented) {
             dialogButtons
@@ -125,22 +126,7 @@ struct SidebarView: View {
                     .font(.caption2)
             }
         }
-        .listStyle(.sidebar)
-    }
-
-    private var settingsDock: some View {
-        List {
-            Section {
-                Button(action: onOpenSettings) {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .accessibilityHint("Opens app settings")
-            }
-        }
-        .listStyle(.sidebar)
-        .scrollDisabled(true)
-        .frame(maxHeight: 56)
-        .scrollIndicators(.hidden)
+        .helmSidebarListStyle()
     }
 
     // MARK: - Tree dialogs

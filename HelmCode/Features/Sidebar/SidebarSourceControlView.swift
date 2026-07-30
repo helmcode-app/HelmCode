@@ -49,8 +49,8 @@ struct SidebarSourceControlView: View {
                 )
             }
         }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .helmSidebarListStyle()
+        .safeAreaBar(edge: .top, spacing: 0) {
             stageToolbar
         }
     }

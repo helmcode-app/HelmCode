@@ -13,7 +13,7 @@ HelmCode/
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
 │   └── Session/         # WorkspaceSession (+ Tree / Bookmarks / SCM)
 ├── Features/
-│   ├── Sidebar/         # Projects · navigator tabs (Files / Bookmarks / SCM)
+│   ├── Sidebar/         # Projects · navigator + system bottom Settings bar
 │   ├── Editor/          # Welcome · empty project · CodeMirror canvas
 │   ├── Commander/       # System inspector: task prompt + timeline
 │   └── Settings/        # Appearance / layout / backend / shortcuts
@@ -50,11 +50,13 @@ HelmCode/
 |-------|---------|
 | No project | **Projects** list |
 | Project open | System segmented **navigator**: Files · Search · Bookmarks · Source Control |
+| Always | Bottom **Settings** via system `safeAreaBar` + soft scroll-edge fade |
 
 - **Files** — outline tree; create / rename / delete / file bookmark via context menu  
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
+- Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`)  
 - Project switching lives in the **center toolbar** (not the sidebar)
 
 ## Backend

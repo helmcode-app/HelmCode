@@ -47,7 +47,7 @@ struct SidebarBookmarksView: View {
                     }
                 }
             }
-            .listStyle(.sidebar)
+            .helmSidebarListStyle()
         }
     }
 
