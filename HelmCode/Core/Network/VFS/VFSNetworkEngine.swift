@@ -18,6 +18,8 @@ final class VFSNetworkEngine: ObservableObject {
 
     @Published private(set) var connectionState: VFSConnectionState = .disconnected
     @Published private(set) var workspaceRoot: String?
+    /// Display name from `vfs/initialize` (git remote / env), not mount basename.
+    @Published private(set) var workspaceName: String?
     @Published private(set) var tree: WorkspaceNode?
     @Published private(set) var lastError: String?
     @Published private(set) var lastChange: VFSDidChangeParams?
@@ -116,9 +118,18 @@ final class VFSNetworkEngine: ObservableObject {
         let params = VFSInitializeParams(root: root ?? initializeRoot)
         let result: VFSInitializeResult = try await call(method: "vfs/initialize", params: params)
         workspaceRoot = result.root
-        let assembled = WorkspaceTreeAssembler.assemble(entries: result.entries, rootPath: result.root)
+        let trimmed = result.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let displayName: String? = trimmed.isEmpty ? nil : trimmed
+        workspaceName = displayName
+        let assembled = WorkspaceTreeAssembler.assemble(
+            entries: result.entries,
+            rootPath: result.root,
+            rootName: displayName
+        )
         tree = assembled
-        log.info("vfs/initialize root=\(result.root, privacy: .public) entries=\(result.entries.count)")
+        log.info(
+            "vfs/initialize root=\(result.root, privacy: .public) name=\(displayName ?? "—", privacy: .public) entries=\(result.entries.count)"
+        )
         return result
     }
 
@@ -127,6 +138,8 @@ final class VFSNetworkEngine: ObservableObject {
             method: "vfs/read",
             params: VFSPathParams(path: path)
         )
+        // Index under both client path and server path (may differ by slash/normalization).
+        fileBuffers[path] = result.content
         fileBuffers[result.path] = result.content
         bufferRevision &+= 1
         return result
@@ -138,6 +151,7 @@ final class VFSNetworkEngine: ObservableObject {
             method: "vfs/write",
             params: VFSWriteParams(path: path, content: content)
         )
+        fileBuffers[path] = content
         fileBuffers[result.path] = content
         bufferRevision &+= 1
         return result
@@ -148,9 +162,17 @@ final class VFSNetworkEngine: ObservableObject {
         let _: Empty = try await call(method: "vfs/shutdown", params: VFSEmptyParams())
     }
 
-    /// Cached text if present.
+    /// Cached text if present (exact key or slash-normalized match).
     func cachedContent(for path: String) -> String? {
-        fileBuffers[path]
+        if let hit = fileBuffers[path] { return hit }
+        let normalized = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if let hit = fileBuffers[normalized] { return hit }
+        for (key, value) in fileBuffers {
+            if key.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == normalized {
+                return value
+            }
+        }
+        return nil
     }
 
     // MARK: - JSON-RPC
@@ -190,6 +212,11 @@ final class VFSNetworkEngine: ObservableObject {
                 try? await Task.sleep(nanoseconds: timeoutNs)
                 guard let self, let pending = self.pending.removeValue(forKey: id) else { return }
                 pending.resume(throwing: VFSError.timeout)
+                // Half-open sockets often leave RPCs hanging — force a clean reconnect.
+                self.log.error("VFS RPC timed out id=\(id) method=\(method, privacy: .public)")
+                if self.wantsRunning {
+                    self.scheduleReconnect(reason: "request timeout")
+                }
             }
         }
 
@@ -307,21 +334,23 @@ final class VFSNetworkEngine: ObservableObject {
             return
         }
 
-        if inbound.isNotification, let method = inbound.method {
-            await handleNotification(method: method, params: inbound.params, raw: data)
-            return
-        }
-
-        guard let id = inbound.id?.intValue else {
-            // Notification without method (ignore) or malformed.
-            if let method = inbound.method {
-                await handleNotification(method: method, params: inbound.params, raw: data)
+        // Responses must be applied immediately so waiting `call()` continuations resume.
+        if let id = inbound.id?.intValue {
+            if let cont = pending.removeValue(forKey: id) {
+                cont.resume(returning: data)
             }
             return
         }
 
-        if let cont = pending.removeValue(forKey: id) {
-            cont.resume(returning: data)
+        // Notifications (no id). Never await RPC work on the receive path —
+        // `applyDidChange` issues `vfs/read` / `initialize` which need this loop
+        // to still call `receive()`. Awaiting here deadlocks until the 30s timeout.
+        if let method = inbound.method {
+            let params = inbound.params
+            let raw = data
+            Task { @MainActor [weak self] in
+                await self?.handleNotification(method: method, params: params, raw: raw)
+            }
         }
     }
 
@@ -338,7 +367,6 @@ final class VFSNetworkEngine: ObservableObject {
                     return
                 }
             } else {
-                // Fallback: decode params from full envelope.
                 struct Note: Decodable {
                     let params: VFSDidChangeParams
                 }
@@ -359,26 +387,29 @@ final class VFSNetworkEngine: ObservableObject {
     private func applyDidChange(_ change: VFSDidChangeParams) async {
         switch change.type {
         case .write:
-            if fileBuffers[change.path] != nil || tree?.find(path: change.path) != nil {
-                do {
-                    _ = try await read(path: change.path)
-                } catch {
-                    log.error("selective reload failed: \(error.localizedDescription, privacy: .public)")
-                }
+            // Always re-read when notified (host/container edits should reach the open buffer).
+            do {
+                _ = try await read(path: change.path)
+            } catch {
+                log.error("selective reload failed: \(error.localizedDescription, privacy: .public)")
             }
         case .create, .remove, .rename:
-            // Re-scan tree from server.
-            do {
-                _ = try await initialize(root: workspaceRoot)
-                if change.type == .remove {
-                    fileBuffers.removeValue(forKey: change.path)
+            // Atomic saves often emit remove+create. Refresh open buffer by path first
+            // so the editor can hot-reload; then re-walk the tree without dropping focus.
+            let path = change.path
+            if change.type == .remove {
+                // If the path still exists (rename race), re-read; else drop cache.
+                do {
+                    _ = try await read(path: path)
+                } catch {
+                    fileBuffers.removeValue(forKey: path)
                     bufferRevision &+= 1
-                } else if change.type == .create || change.type == .rename {
-                    // Best-effort: if we had a buffer, refresh.
-                    if fileBuffers[change.path] != nil {
-                        _ = try? await read(path: change.path)
-                    }
                 }
+            } else {
+                _ = try? await read(path: path)
+            }
+            do {
+                _ = try await initialize(root: nil)
             } catch {
                 log.error("tree refresh after didChange failed: \(error.localizedDescription, privacy: .public)")
             }

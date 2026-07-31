@@ -54,7 +54,26 @@ struct VFSInitializeParams: Encodable, Sendable {
 
 struct VFSInitializeResult: Codable, Sendable, Equatable {
     let root: String
+    /// Human-facing project name from runner (git remote / env); optional for older servers.
+    let name: String?
     let entries: [RawFileNode]
+
+    enum CodingKeys: String, CodingKey {
+        case root, name, entries
+    }
+
+    init(root: String, name: String? = nil, entries: [RawFileNode]) {
+        self.root = root
+        self.name = name
+        self.entries = entries
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        root = try container.decode(String.self, forKey: .root)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        entries = try container.decode([RawFileNode].self, forKey: .entries)
+    }
 }
 
 // MARK: - Read / write

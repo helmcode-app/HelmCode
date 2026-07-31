@@ -24,6 +24,15 @@ extension WorkspaceSession {
         )
 
         let previousSelection = selectedFileID
+        let previousPath: String? = {
+            guard let id = previousSelection else { return nil }
+            if let existing = projects.first(where: { $0.id == vfsID })?.root.find(id: id) {
+                return existing.path
+            }
+            if id.hasPrefix("vfs:") { return String(id.dropFirst(4)) }
+            return nil
+        }()
+
         let isFirstInstall = !projects.contains(where: { $0.id == vfsID })
 
         if let idx = projects.firstIndex(where: { $0.id == vfsID }) {
@@ -39,10 +48,14 @@ extension WorkspaceSession {
 
         guard selectedProjectID == vfsID else { return }
 
-        // Tree refresh: keep selection when possible (do not call openProject — it clears the file).
-        if let previousSelection, project.root.find(id: previousSelection) == nil {
-            selectedFileID = nil
-        } else {
+        // Tree refresh: rebind by path first so atomic save (remove+create) and
+        // re-walked trees never bounce the center column to empty state.
+        if let path = previousPath, let node = project.root.find(path: path) {
+            selectedFileID = node.id
+        } else if let previousSelection, project.root.find(id: previousSelection) != nil {
+            selectedFileID = previousSelection
+        } else if previousSelection != nil {
+            // Keep id; `selectedFile` synthesizes a stub if the node is mid-refresh.
             selectedFileID = previousSelection
         }
         sourceControl = sourceControlByProject[vfsID]

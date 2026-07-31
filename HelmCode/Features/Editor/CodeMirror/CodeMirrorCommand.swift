@@ -20,6 +20,7 @@ enum CodeMirrorCommand: String, CaseIterable, Sendable {
     case indentMore
     case indentLess
     case deleteLine
+    case save
 
     /// Items shown in the system edit / context menu (subset of all commands).
     static let contextMenuItems: [ContextMenuItem] = [
@@ -27,6 +28,7 @@ enum CodeMirrorCommand: String, CaseIterable, Sendable {
         .init(command: .toggleBookmark, title: "Toggle Bookmark", systemImage: "bookmark"),
         .init(command: .selectLine, title: "Select Line", systemImage: "line.3.horizontal"),
         .init(command: .find, title: "Find", systemImage: "magnifyingglass"),
+        .init(command: .save, title: "Save", systemImage: "square.and.arrow.down"),
     ]
 
     struct ContextMenuItem: Sendable {

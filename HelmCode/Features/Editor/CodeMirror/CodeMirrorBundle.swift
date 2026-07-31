@@ -36,6 +36,11 @@ enum CodeMirrorBundle {
         "\(jsGlobal) && \(jsGlobal).setDocument(\(jsonObjectLiteral));"
     }
 
+    /// Soft-replace document body; preserves first visible line at top of viewport.
+    static func replaceDocumentTextJavaScript(jsonStringLiteral: String) -> String {
+        "\(jsGlobal) && \(jsGlobal).replaceDocumentText && \(jsGlobal).replaceDocumentText(\(jsonStringLiteral), { preserveTopLine: true });"
+    }
+
     static var relayoutJavaScript: String {
         "\(jsGlobal) && \(jsGlobal).relayout && \(jsGlobal).relayout();"
     }

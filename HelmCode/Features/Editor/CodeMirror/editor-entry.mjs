@@ -246,6 +246,46 @@ function postToggleBookmark(line, lineText) {
   } catch (_) {}
 }
 
+function postToHost(payload) {
+  try {
+    window.webkit?.messageHandlers?.helmEditor?.postMessage(payload)
+  } catch (_) {}
+}
+
+/** Notify Swift of document edits (debounced). Host must not call setDocument for these. */
+let documentChangeTimer = null
+/** True while applying a host-driven hot reload (skip echo documentChange). */
+let suppressDocumentChange = false
+
+function documentChangeExtension() {
+  return EditorView.updateListener.of((update) => {
+    if (!update.docChanged || update.view.state.readOnly || suppressDocumentChange) return
+    if (documentChangeTimer) clearTimeout(documentChangeTimer)
+    documentChangeTimer = setTimeout(() => {
+      documentChangeTimer = null
+      if (suppressDocumentChange) return
+      postToHost({
+        type: "documentChange",
+        text: update.state.doc.toString(),
+      })
+    }, 120)
+  })
+}
+
+function postSaveRequest() {
+  if (!view) return true
+  // Flush pending debounce so host has latest text before save.
+  if (documentChangeTimer) {
+    clearTimeout(documentChangeTimer)
+    documentChangeTimer = null
+  }
+  postToHost({
+    type: "save",
+    text: view.state.doc.toString(),
+  })
+  return true
+}
+
 /** Ask host to toggle; host pushes updated markers via setBookmarks. */
 function requestToggleBookmarkAt(view, lineNumber) {
   const line = view.state.doc.line(lineNumber)
@@ -282,6 +322,102 @@ function goToLine(view, lineNumber) {
     effects: EditorView.scrollIntoView(line.from, { y: "center" }),
   })
   view.focus()
+}
+
+/** 1-based line currently at the top of the editor viewport. */
+function firstVisibleLineNumber(view) {
+  try {
+    const rect = view.scrollDOM.getBoundingClientRect()
+    const pos = view.posAtCoords({ x: rect.left + 12, y: rect.top + 4 })
+    if (pos == null) return 1
+    return view.state.doc.lineAt(pos).number
+  } catch (_) {
+    return 1
+  }
+}
+
+/** Pin a line to the top of the viewport (hot reload). */
+function scrollLineToTop(view, lineNumber) {
+  const n = Math.min(Math.max(1, Math.floor(Number(lineNumber) || 1)), view.state.doc.lines)
+  const line = view.state.doc.line(n)
+  view.dispatch({
+    effects: EditorView.scrollIntoView(line.from, { y: "start", yMargin: 0 }),
+  })
+}
+
+/** Shared prefix length (UTF-16 code units). */
+function commonPrefixLength(a, b) {
+  const n = Math.min(a.length, b.length)
+  let i = 0
+  while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++
+  return i
+}
+
+/** Shared suffix length, excluding the first `skip` code units of each string. */
+function commonSuffixLength(a, b, skip) {
+  const max = Math.min(a.length - skip, b.length - skip)
+  let i = 0
+  while (
+    i < max &&
+    a.charCodeAt(a.length - 1 - i) === b.charCodeAt(b.length - 1 - i)
+  ) {
+    i++
+  }
+  return i
+}
+
+/**
+ * Hot-reload body without rebuilding EditorState.
+ * Uses prefix/suffix diff so CM only re-highlights the changed span (less flash),
+ * keeps pixel scroll, and suppresses documentChange echo to Swift.
+ */
+function replaceDocumentText(text, { preserveTopLine = true } = {}) {
+  if (!view) return
+  const next = typeof text === "string" ? text : ""
+  const current = view.state.doc.toString()
+  if (current === next) return
+
+  const scrollTop = view.scrollDOM.scrollTop
+  const scrollLeft = view.scrollDOM.scrollLeft
+  const topLine = preserveTopLine ? firstVisibleLineNumber(view) : 1
+
+  const pref = commonPrefixLength(current, next)
+  const suff = commonSuffixLength(current, next, pref)
+  const from = pref
+  const to = current.length - suff
+  const insert = next.slice(pref, next.length - suff)
+
+  suppressDocumentChange = true
+  if (documentChangeTimer) {
+    clearTimeout(documentChangeTimer)
+    documentChangeTimer = null
+  }
+  try {
+    view.dispatch({
+      changes: { from, to, insert },
+      // Keep user selection mapping; no scroll effect here.
+      userEvent: "input.remote",
+    })
+    // Pixel restore first — cheaper and less flicker than scrollIntoView on every paint.
+    view.scrollDOM.scrollTop = scrollTop
+    view.scrollDOM.scrollLeft = scrollLeft
+  } finally {
+    // Keep suppress until after any sync updateListener runs.
+    queueMicrotask(() => {
+      suppressDocumentChange = false
+    })
+  }
+
+  if (preserveTopLine) {
+    // If lines above the viewport changed height, re-pin the previous top line.
+    requestAnimationFrame(() => {
+      if (!view) return
+      const nowTop = firstVisibleLineNumber(view)
+      if (nowTop !== topLine) {
+        scrollLineToTop(view, topLine)
+      }
+    })
+  }
 }
 
 // MARK: Find / replace panel (VS Code widget chrome)
@@ -643,6 +779,14 @@ function helmEditorKeymap() {
     { key: "Mod-Alt-]", run: unfoldAll },
     { key: "Mod-Alt-.", run: toggleFold },
 
+    // Save (⌘S) — host writes via vfs/write
+    {
+      key: "Mod-s",
+      run: () => postSaveRequest(),
+      preventDefault: true,
+      stopPropagation: true,
+    },
+
     // Find widget (⌘F find-only; ⌘⌥F expand replace) — VS Code parity.
     {
       key: "Mod-f",
@@ -678,7 +822,11 @@ function installFindKeyCapture() {
       const mod = event.metaKey || event.ctrlKey
       if (!mod) return
       const key = (event.key || "").toLowerCase()
-      if (key === "f") {
+      if (key === "s") {
+        event.preventDefault()
+        event.stopPropagation()
+        postSaveRequest()
+      } else if (key === "f") {
         event.preventDefault()
         event.stopPropagation()
         openFindPanel(view, event.altKey)
@@ -736,6 +884,7 @@ function makeExtensions({ language, dark, readOnly }) {
       createPanel: (v) => new HelmSearchPanel(v),
     }),
     EditorView.lineWrapping,
+    documentChangeExtension(),
     editorKeymap(),
     // Higher precedence than defaults so zoom / IDE keys win when overlapping.
     helmEditorKeymap(),
@@ -811,6 +960,19 @@ function boot() {
       applyBookmarkLines(view, lastBookmarkLines)
       requestAnimationFrame(() => view.requestMeasure())
     },
+    /**
+     * Hot-reload body only: soft replace + keep the previous top-of-viewport line.
+     * Prefer this over setDocument for remote didChange updates.
+     */
+    replaceDocumentText(text, opts) {
+      replaceDocumentText(text, opts || { preserveTopLine: true })
+      if (view && lastBookmarkLines.length) {
+        applyBookmarkLines(view, lastBookmarkLines)
+      }
+    },
+    firstVisibleLine() {
+      return view ? firstVisibleLineNumber(view) : 1
+    },
     setBookmarks(lines) {
       if (!view) return
       lastBookmarkLines = Array.isArray(lines) ? lines : []
@@ -864,6 +1026,8 @@ function boot() {
           return !!indentLess(view)
         case "deleteLine":
           return !!deleteLine(view)
+        case "save":
+          return !!postSaveRequest()
         default:
           return false
       }

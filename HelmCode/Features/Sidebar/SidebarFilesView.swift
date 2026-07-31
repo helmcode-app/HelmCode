@@ -131,7 +131,12 @@ struct SidebarFilesView: View {
         do {
             _ = try await vfs.read(path: path)
         } catch {
-            session.lastTreeError = error.localizedDescription
+            // Transient WS timeouts are recovered by reconnect; avoid modal spam.
+            let message = error.localizedDescription
+            if message.contains("timed out") {
+                return
+            }
+            session.lastTreeError = message
         }
     }
 }

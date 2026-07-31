@@ -74,6 +74,12 @@ final class CodeMirrorWebView: WKWebView {
                 modifiers: [.command, .shift],
                 action: #selector(helmFindPrevious(_:))
             ),
+            Self.priorityCommand(
+                title: "Save",
+                input: "s",
+                modifiers: .command,
+                action: #selector(helmSave(_:))
+            ),
         ]
     }
 
@@ -105,12 +111,20 @@ final class CodeMirrorWebView: WKWebView {
         onCustomCommand?(.findPrevious)
     }
 
+    @objc private func helmSave(_ sender: Any?) {
+        onCustomCommand?(.save)
+    }
+
     /// Backup path when key commands are not delivered but presses reach this view.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses {
             guard let key = press.key else { continue }
             let mods = key.modifierFlags.intersection([.command, .shift, .alternate, .control])
             let chars = key.charactersIgnoringModifiers.lowercased()
+            if chars == "s", mods.contains(.command) {
+                onCustomCommand?(.save)
+                return
+            }
             if chars == "f", mods.contains(.command) {
                 onCustomCommand?(mods.contains(.alternate) ? .findReplace : .find)
                 return

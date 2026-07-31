@@ -19,7 +19,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var revealLine: Int? = nil
     /// Changes when a new reveal is requested (even for the same line).
     var revealGeneration: Int = 0
+    /// When true, text-only updates use soft replace (hot reload) instead of setDocument.
+    var preferSoftTextReplace: Bool = false
     var onToggleBookmark: ((Int, String) -> Void)?
+    /// User edits from CodeMirror (do not push `setDocument` back for these).
+    var onTextChange: ((String) -> Void)?
+    /// Explicit save (⌘S / menu). Text is the latest document body.
+    var onSave: ((String) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -57,6 +63,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
 
         private var isReady = false
         private var lastPayloadKey: String?
+        private var lastMetaKey: String?
         private var lastBookmarkKey: String?
         private var lastRevealedLineToken: String?
 
@@ -81,10 +88,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
         }
 
         func syncToWebView() {
-            pushDocumentIfNeeded()
+            let didSoftReplace = pushDocumentIfNeeded()
             pushBookmarksIfNeeded()
             revealLineIfNeeded()
-            requestRelayout()
+            // Relayout after full setDocument only — soft hot-reload avoids the flash.
+            if !didSoftReplace {
+                requestRelayout()
+            }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -115,12 +125,33 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 DispatchQueue.main.async { [weak self] in
                     self?.parent.onToggleBookmark?(line, lineText)
                 }
+            case "documentChange":
+                let text = body["text"] as? String ?? ""
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    // Mark payload as already matching so updateUIView won't re-setDocument.
+                    self.lastPayloadKey = self.documentKey(forText: text)
+                    self.parent.onTextChange?(text)
+                }
+            case "save":
+                let text = body["text"] as? String ?? ""
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.lastPayloadKey = self.documentKey(forText: text)
+                    self.parent.onTextChange?(text)
+                    self.parent.onSave?(text)
+                }
             default:
                 break
             }
         }
 
         func run(_ command: CodeMirrorCommand) {
+            if command == .save {
+                // Prefer JS path so we get the latest doc; it posts "save" back.
+                evaluate(CodeMirrorBundle.runCommandJavaScript(command))
+                return
+            }
             // Hardware ⌘F lands here via UIKeyCommand (system often swallows it before JS).
             evaluate(CodeMirrorBundle.runCommandJavaScript(command))
         }
@@ -128,19 +159,35 @@ struct CodeMirrorHostView: UIViewRepresentable {
         private func markReady() {
             isReady = true
             lastPayloadKey = nil
+            lastMetaKey = nil
             lastBookmarkKey = nil
             lastRevealedLineToken = nil
             syncToWebView()
         }
 
-        private func pushDocumentIfNeeded() {
-            guard isReady else { return }
+        /// Returns `true` when a soft (hot-reload) replace was applied.
+        @discardableResult
+        private func pushDocumentIfNeeded() -> Bool {
+            guard isReady else { return false }
 
             let key = documentKey
-            guard key != lastPayloadKey else { return }
-            lastPayloadKey = key
-            // Document rebuild clears gutter; re-push bookmarks next.
-            lastBookmarkKey = nil
+            guard key != lastPayloadKey else { return false }
+
+            let meta = metaKey
+            let textOnlyChange = lastMetaKey == meta && lastPayloadKey != nil
+
+            // Hot reload: same language/theme, body changed externally → soft replace.
+            // Important: only commit lastPayloadKey after we have a valid JS payload.
+            if parent.preferSoftTextReplace, textOnlyChange {
+                if let textJSON = Self.jsonEncode(parent.text) {
+                    lastPayloadKey = key
+                    // Don't re-push bookmarks on every remote keystroke-sized update —
+                    // markers map through the change set.
+                    evaluate(CodeMirrorBundle.replaceDocumentTextJavaScript(jsonStringLiteral: textJSON))
+                    return true
+                }
+                // Fall through to full setDocument if encoding fails.
+            }
 
             let payload: [String: Any] = [
                 "text": parent.text,
@@ -149,12 +196,18 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 "readOnly": !parent.isEditable,
                 "bookmarks": parent.bookmarkLines,
             ]
-            guard let json = Self.jsonString(payload) else { return }
+            guard let json = Self.jsonEncode(payload) else { return false }
+
+            lastPayloadKey = key
+            lastMetaKey = meta
+            // Document rebuild clears gutter; re-push bookmarks next.
+            lastBookmarkKey = nil
 
             evaluate(CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json)) { [weak self] in
                 self?.lastBookmarkKey = self?.bookmarkKey
                 self?.revealLineIfNeeded()
             }
+            return false
         }
 
         private func pushBookmarksIfNeeded() {
@@ -162,7 +215,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
             let key = bookmarkKey
             guard key != lastBookmarkKey else { return }
             lastBookmarkKey = key
-            guard let json = Self.jsonString(parent.bookmarkLines) else { return }
+            guard let json = Self.jsonEncode(parent.bookmarkLines) else { return }
             evaluate(CodeMirrorBundle.setBookmarksJavaScript(linesJSONArray: json))
         }
 
@@ -194,19 +247,36 @@ struct CodeMirrorHostView: UIViewRepresentable {
         }
 
         private var documentKey: String {
+            documentKey(forText: parent.text)
+        }
+
+        /// Language / theme / editability (excludes body text).
+        private var metaKey: String {
             [
                 parent.language.rawValue,
                 parent.isDark ? "d" : "l",
                 parent.isEditable ? "e" : "r",
-                parent.text,
             ].joined(separator: "\u{1e}")
+        }
+
+        private func documentKey(forText text: String) -> String {
+            metaKey + "\u{1e}" + text
         }
 
         private var bookmarkKey: String {
             parent.bookmarkLines.map(String.init).joined(separator: ",")
         }
 
-        private static func jsonString(_ value: Any) -> String? {
+        /// Encode any JSON value including top-level String (JSONSerialization rejects bare strings).
+        private static func jsonEncode(_ value: Any) -> String? {
+            if let string = value as? String {
+                guard let data = try? JSONSerialization.data(withJSONObject: string, options: [.fragmentsAllowed]),
+                      let json = String(data: data, encoding: .utf8) else { return nil }
+                return json
+            }
+            if let int = value as? Int {
+                return String(int)
+            }
             guard JSONSerialization.isValidJSONObject(value),
                   let data = try? JSONSerialization.data(withJSONObject: value),
                   let json = String(data: data, encoding: .utf8) else { return nil }
@@ -214,3 +284,4 @@ struct CodeMirrorHostView: UIViewRepresentable {
         }
     }
 }
+
