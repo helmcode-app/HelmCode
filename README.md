@@ -6,27 +6,35 @@ Mobile-first iPad AI coding console — pure SwiftUI shell with a **CodeMirror 6
 
 ```
 HelmCode/
-├── App/                 # @main, RootView (NavigationSplitView + .inspector)
+├── App/                      # @main, RootView shell
 ├── Core/
-│   ├── Models/          # API + workspace domain types
-│   ├── Network/         # HTTP task client + VFS WebSocket JSON-RPC
-│   ├── Preferences/     # AppStorage keys, layout metrics, appearance
-│   └── Session/         # WorkspaceSession (+ Tree / Bookmarks / SCM / VFS)
+│   ├── Models/
+│   │   ├── API/              # open-core Codable types
+│   │   └── Workspace/        # tree, search, SCM models, VFS tree assembler
+│   ├── Network/
+│   │   ├── …                 # HTTP task client, RunnerURL, connection sync
+│   │   └── VFS/              # WebSocket JSON-RPC transport only
+│   ├── Preferences/          # AppStorage keys, layout metrics
+│   └── Session/              # WorkspaceSession (+ Tree / Bookmarks / SCM / VFS)
 ├── Features/
-│   ├── Sidebar/         # Projects · navigator + system bottom Settings bar
-│   ├── Editor/          # Welcome · Open Project · CodeMirror canvas
-│   ├── Commander/       # System inspector: task prompt + timeline
-│   └── Settings/        # Appearance / layout / backend / shortcuts
-├── Shared/UI/           # System chrome, search field, inset cards, toggles
-└── …/CodeMirror/        # index.html + editor.bundle.js (offline CM6)
+│   ├── Sidebar/              # Projects · navigators · Settings bar
+│   ├── Editor/
+│   │   ├── Welcome/          # start page, Open Project, Browse Projects
+│   │   ├── CodeMirror/       # CM6 host (Swift + offline web assets)
+│   │   └── Editor*.swift     # detail routing, canvas, empty, switcher
+│   ├── Commander/            # inspector: prompt + timeline
+│   └── Settings/             # appearance / layout / backend / shortcuts link
+└── Shared/UI/                # system chrome, search field, cards, toggles
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
 | **App** | DI, NavigationSplitView + inspector chrome, settings sheet |
-| **Core** | Domain models, HTTP, prefs, session state |
-| **Features** | UI surfaces by product area |
-| **Shared** | Cross-feature controls |
+| **Core** | Domain models, network transport, prefs, session state |
+| **Features** | UI by product column (Sidebar / Editor / Commander / Settings) |
+| **Shared** | Cross-feature controls only (no business logic) |
+
+**Dependency direction:** `App → Features → Core`, `Features → Shared`. Network does not own session; `WorkspaceSession` applies VFS trees.
 
 ### Shell layout
 
@@ -75,7 +83,7 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Notifications | `vfs/didChange` → selective buffer reload / tree refresh |
 | URL helpers | `RunnerURL` (HTTP normalize + `ws…/v1/vfs`) · `VFSConnect` (Open Project flow) |
 
-Flat `entries` from initialize are assembled client-side into `WorkspaceTreeNode` (`WorkspaceTreeAssembler`).
+Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`WorkspaceTreeAssembler`) — same tree model as demo catalog projects.
 
 ## Backend
 

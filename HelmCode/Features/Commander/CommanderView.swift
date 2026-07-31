@@ -166,14 +166,7 @@ struct CommanderView: View {
     }
 
     private var backendStatusLabel: some View {
-        HStack(spacing: 6) {
-            ConnectionStatusDot(state: engine.connectionState)
-            Text(engine.connectionState.shortTitle)
-                .font(.caption)
-                .foregroundStyle(engine.connectionState.isOnline ? Color.secondary : Color.red)
-                .lineLimit(1)
-        }
-        .accessibilityElement(children: .combine)
+        BackendConnectionLabel(state: engine.connectionState)
     }
 
     private var phaseChip: some View {

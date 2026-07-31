@@ -95,62 +95,6 @@ struct VFSDidChangeParams: Codable, Sendable, Equatable {
     let type: VFSChangeType
 }
 
-// MARK: - Nested tree (SwiftUI)
-
-/// Nested tree node for `OutlineGroup` / sidebar rendering.
-struct WorkspaceTreeNode: Identifiable, Hashable, Sendable {
-    let id: String
-    let name: String
-    let path: String
-    let isDirectory: Bool
-    let size: Int64
-    var children: [WorkspaceTreeNode]
-
-    var languageHint: String? {
-        guard !isDirectory else { return nil }
-        return FileLanguageHint.resolve(fileName: name)
-    }
-
-    /// SF Symbol for sidebar (folder amber / file blue tints applied in the view).
-    var systemImage: String {
-        if isDirectory { return "folder.fill" }
-        return FileLanguageHint.systemImageName(forLanguageHint: languageHint, filled: true)
-    }
-
-    /// Files yield `nil` children for `OutlineGroup`.
-    var directoryChildren: [WorkspaceTreeNode]? {
-        isDirectory ? children : nil
-    }
-
-    func find(path: String) -> WorkspaceTreeNode? {
-        if self.path == path { return self }
-        for child in children {
-            if let hit = child.find(path: path) { return hit }
-        }
-        return nil
-    }
-
-    func find(id: String) -> WorkspaceTreeNode? {
-        if self.id == id { return self }
-        for child in children {
-            if let hit = child.find(id: id) { return hit }
-        }
-        return nil
-    }
-
-    /// Convert into the session-level `WorkspaceNode` graph.
-    func asWorkspaceNode() -> WorkspaceNode {
-        WorkspaceNode(
-            id: id,
-            name: name,
-            path: path,
-            isDirectory: isDirectory,
-            children: children.map { $0.asWorkspaceNode() },
-            languageHint: languageHint
-        )
-    }
-}
-
 // MARK: - Connection
 
 enum VFSConnectionState: Equatable, Sendable {

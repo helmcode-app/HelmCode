@@ -25,7 +25,7 @@ struct SidebarBookmarksView: View {
                         Label {
                             bookmarkLabel(item.bookmark, node: item.node)
                         } icon: {
-                            Image(systemName: item.node.systemImage)
+                            Image(systemName: item.node.sidebarSystemImage)
                                 .symbolRenderingMode(.monochrome)
                                 .foregroundStyle(WorkspaceNodeIconStyle.color(for: item.node))
                         }

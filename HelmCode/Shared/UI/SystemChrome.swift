@@ -2,7 +2,7 @@
 //  SystemChrome.swift
 //  HelmCode
 //
-//  Shared iOS system control chrome (segmented pickers, sheet dismiss).
+//  Shared iOS system control chrome (segmented pickers, sheet dismiss, form fields).
 //
 
 import SwiftUI
@@ -26,5 +26,27 @@ extension View {
                 .disabled(disabled)
             }
         }
+    }
+
+    /// Settings / Open Project URL fields — no auto-cap, no correct, URL keyboard.
+    func helmURLFieldStyle() -> some View {
+        textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.URL)
+            .textContentType(.URL)
+    }
+
+    /// Backend token / monospaced config fields.
+    func helmMonospacedFieldStyle() -> some View {
+        textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .font(.body.monospaced())
+    }
+}
+
+extension VFSConnectionState {
+    /// Secondary when ready; orange while connecting / offline / error.
+    var statusForeground: Color {
+        isReady ? Color.secondary : Color.orange
     }
 }

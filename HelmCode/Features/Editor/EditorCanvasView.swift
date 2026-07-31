@@ -36,7 +36,7 @@ struct EditorCanvasView: View {
     }
 
     private var usesVFS: Bool {
-        project.id == WorkspaceSession.vfsProjectID
+        project.isVFSRemote
     }
 
     var body: some View {
@@ -111,7 +111,7 @@ struct EditorCanvasView: View {
             Text("Wrap")
             if usesVFS {
                 Text(vfs.connectionState.isReady ? "VFS" : "VFS…")
-                    .foregroundStyle(vfs.connectionState.isReady ? Color.secondary : Color.orange)
+                    .foregroundStyle(vfs.connectionState.statusForeground)
             }
             if let loadError {
                 Text(loadError)

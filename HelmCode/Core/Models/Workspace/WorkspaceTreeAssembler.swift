@@ -2,7 +2,7 @@
 //  WorkspaceTreeAssembler.swift
 //  HelmCode
 //
-//  O(N) flat `RawFileNode` list → nested `WorkspaceTreeNode` forest.
+//  O(N) flat `RawFileNode` list → nested `WorkspaceNode` forest.
 //
 
 import Foundation
@@ -18,46 +18,42 @@ enum WorkspaceTreeAssembler {
         entries: [RawFileNode],
         rootPath: String,
         rootName: String? = nil
-    ) -> WorkspaceTreeNode {
-        // path → mutable builder
+    ) -> WorkspaceNode {
         final class Builder {
             let name: String
             let path: String
             let isDirectory: Bool
-            var size: Int64
             var children: [String: Builder] = [:]
 
-            init(name: String, path: String, isDirectory: Bool, size: Int64) {
+            init(name: String, path: String, isDirectory: Bool) {
                 self.name = name
                 self.path = path
                 self.isDirectory = isDirectory
-                self.size = size
             }
 
-            func toNode() -> WorkspaceTreeNode {
+            func toNode() -> WorkspaceNode {
                 let sorted = children.values.sorted { lhs, rhs in
                     if lhs.isDirectory != rhs.isDirectory {
                         return lhs.isDirectory && !rhs.isDirectory
                     }
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                 }
-                return WorkspaceTreeNode(
+                return WorkspaceNode(
                     id: path.isEmpty ? WorkspaceTreeAssembler.rootID : "vfs:\(path)",
                     name: name,
                     path: path,
                     isDirectory: isDirectory,
-                    size: size,
-                    children: sorted.map { $0.toNode() }
+                    children: sorted.map { $0.toNode() },
+                    languageHint: isDirectory ? nil : FileLanguageHint.resolve(fileName: name)
                 )
             }
         }
 
         let displayName = rootName
-            ?? URL(fileURLWithPath: rootPath).lastPathComponent
-            .nilIfEmpty
+            ?? URL(fileURLWithPath: rootPath).lastPathComponent.nilIfEmpty
             ?? "Workspace"
 
-        let root = Builder(name: displayName, path: "", isDirectory: true, size: 0)
+        let root = Builder(name: displayName, path: "", isDirectory: true)
 
         for entry in entries {
             let parts = entry.path
@@ -74,38 +70,18 @@ enum WorkspaceTreeAssembler {
                 cumulative = cumulative.isEmpty ? part : "\(cumulative)/\(part)"
 
                 if let existing = parent.children[part] {
-                    if isLast {
-                        // Prefer explicit dir/file flags and sizes from the leaf entry.
-                        existing.size = entry.size
-                    }
                     parent = existing
                     continue
                 }
 
-                let isDir: Bool
-                if isLast {
-                    isDir = entry.isDirectory
-                } else {
-                    isDir = true
-                }
-
-                let node = Builder(
-                    name: part,
-                    path: cumulative,
-                    isDirectory: isDir,
-                    size: isLast ? entry.size : 0
-                )
+                let isDir = isLast ? entry.isDirectory : true
+                let node = Builder(name: part, path: cumulative, isDirectory: isDir)
                 parent.children[part] = node
                 parent = node
             }
         }
 
         return root.toNode()
-    }
-
-    /// Convenience: forest without a synthetic display root (top-level children only).
-    static func topLevelForest(from entries: [RawFileNode], rootPath: String) -> [WorkspaceTreeNode] {
-        assemble(entries: entries, rootPath: rootPath).children
     }
 }
 

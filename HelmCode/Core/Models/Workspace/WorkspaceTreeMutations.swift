@@ -38,11 +38,6 @@ extension WorkspaceProject {
 }
 
 extension WorkspaceNode {
-    /// Infer editor language from a file name extension.
-    static func languageHint(forFileName name: String) -> String? {
-        FileLanguageHint.resolve(fileName: name)
-    }
-
     static func sanitizeName(_ raw: String) -> String? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
@@ -59,7 +54,7 @@ extension WorkspaceNode {
             path: path,
             isDirectory: false,
             children: [],
-            languageHint: languageHint(forFileName: name)
+            languageHint: FileLanguageHint.resolve(fileName: name)
         )
     }
 
@@ -191,7 +186,7 @@ extension WorkspaceNode {
             path: newPath,
             isDirectory: isDirectory,
             children: kids,
-            languageHint: isDirectory ? nil : Self.languageHint(forFileName: name)
+            languageHint: isDirectory ? nil : FileLanguageHint.resolve(fileName: name)
         )
     }
 

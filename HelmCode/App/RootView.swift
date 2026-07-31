@@ -114,8 +114,7 @@ struct RootView: View {
     }
 
     private func syncVFSConfig() {
-        vfs.baseURLString = engine.baseURLString
-        vfs.apiToken = engine.apiToken
+        BackendConnectionSync.syncVFS(from: engine, to: vfs)
     }
 
     private func applySidebarVisibility(_ show: Bool) {

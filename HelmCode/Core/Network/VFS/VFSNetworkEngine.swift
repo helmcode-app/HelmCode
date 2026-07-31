@@ -18,7 +18,7 @@ final class VFSNetworkEngine: ObservableObject {
 
     @Published private(set) var connectionState: VFSConnectionState = .disconnected
     @Published private(set) var workspaceRoot: String?
-    @Published private(set) var tree: WorkspaceTreeNode?
+    @Published private(set) var tree: WorkspaceNode?
     @Published private(set) var lastError: String?
     @Published private(set) var lastChange: VFSDidChangeParams?
     /// Path → latest known text (filled by `read` / `write` / selective reload).

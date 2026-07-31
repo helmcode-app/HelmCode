@@ -18,9 +18,7 @@ struct HelmCodeApp: App {
                 .environmentObject(networkEngine)
                 .environmentObject(vfsEngine)
                 .onAppear {
-                    // Keep VFS tunnel on the same backend host/token as the HTTP engine.
-                    vfsEngine.baseURLString = networkEngine.baseURLString
-                    vfsEngine.apiToken = networkEngine.apiToken
+                    BackendConnectionSync.syncVFS(from: networkEngine, to: vfsEngine)
                 }
         }
         #if os(iOS)

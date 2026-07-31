@@ -48,10 +48,7 @@ enum VFSConnect {
     ) async throws -> VFSConnectOutcome {
         guard RunnerURL.isValid(urlString) else { throw VFSConnectError.invalidURL }
 
-        let httpURL = RunnerURL.normalizeHTTP(urlString)
-        engine.baseURLString = httpURL
-        vfs.baseURLString = httpURL
-        vfs.apiToken = engine.apiToken
+        BackendConnectionSync.apply(urlString: urlString, engine: engine, vfs: vfs)
 
         await engine.checkBackendHealth()
         if case .offline(let message) = engine.connectionState {

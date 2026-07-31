@@ -9,9 +9,15 @@ import SwiftUI
 
 enum WorkspaceNodeIconStyle {
     /// Idle (unselected) icon tint by node kind / language.
+    /// Directories use amber (sidebar tree + bookmarks + search).
     static func color(for node: WorkspaceNode) -> Color {
-        if node.isDirectory { return .blue }
+        if node.isDirectory { return .orange }
         return color(forLanguageHint: node.languageHint)
+    }
+
+    /// Selected list row: match title color (primary), not type tint.
+    static func color(for node: WorkspaceNode, isSelected: Bool) -> Color {
+        isSelected ? .primary : color(for: node)
     }
 
     /// SF Symbol for a language hint (or generic file).

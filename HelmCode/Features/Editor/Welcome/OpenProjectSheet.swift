@@ -121,10 +121,7 @@ struct OpenProjectSheet: View {
         Form {
             Section {
                 TextField("https://runner.example.com:8080", text: $runnerURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .textContentType(.URL)
+                    .helmURLFieldStyle()
                     .disabled(isConnecting)
             } header: {
                 Text("Runner URL")

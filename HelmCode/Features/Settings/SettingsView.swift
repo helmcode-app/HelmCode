@@ -83,15 +83,13 @@ struct SettingsView: View {
     private var backendSection: some View {
         Section {
             TextField("Base URL", text: $draftBaseURL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .helmMonospacedFieldStyle()
+                .keyboardType(.URL)
+                .textContentType(.URL)
                 .onSubmit { applyBackendDraft() }
 
             SecureField("API Token (optional)", text: $draftToken)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .helmMonospacedFieldStyle()
                 .onSubmit { applyBackendDraft() }
 
             Button {
@@ -126,7 +124,7 @@ struct SettingsView: View {
             }
             LabeledContent("VFS") {
                 Text(vfs.connectionState.shortTitle)
-                    .foregroundStyle(vfs.connectionState.isReady ? Color.secondary : Color.orange)
+                    .foregroundStyle(vfs.connectionState.statusForeground)
                     .multilineTextAlignment(.trailing)
             }
             if let root = vfs.workspaceRoot {
@@ -163,14 +161,18 @@ struct SettingsView: View {
     private func applyBackendDraft() {
         let raw = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !raw.isEmpty {
-            let url = RunnerURL.normalizeHTTP(raw)
-            draftBaseURL = url
-            engine.baseURLString = url
-            vfs.baseURLString = url
+            draftBaseURL = RunnerURL.normalizeHTTP(raw)
+            BackendConnectionSync.apply(
+                urlString: draftBaseURL,
+                token: draftToken,
+                engine: engine,
+                vfs: vfs
+            )
+        } else {
+            let token = draftToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            engine.apiToken = token
+            BackendConnectionSync.syncVFS(from: engine, to: vfs)
         }
-        let token = draftToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        engine.apiToken = token
-        vfs.apiToken = token
         Task { await refreshHealth() }
         vfs.start()
     }
