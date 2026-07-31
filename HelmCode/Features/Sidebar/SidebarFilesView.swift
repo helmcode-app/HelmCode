@@ -38,17 +38,6 @@ struct SidebarFilesView: View {
             }
         }
         .helmSidebarListStyle()
-        .overlay(alignment: .bottom) {
-            if isVFS {
-                Text(vfs.connectionState.shortTitle)
-                    .font(.caption2)
-                    .foregroundStyle(vfs.connectionState.statusForeground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .background(.bar)
-                    .allowsHitTesting(false)
-            }
-        }
     }
 
     // MARK: - Context menus

@@ -16,6 +16,7 @@ struct RootView: View {
     @EnvironmentObject private var engine: HelmCodeNetworkEngine
     @EnvironmentObject private var vfs: VFSNetworkEngine
     @StateObject private var session = WorkspaceSession()
+    @StateObject private var runnerStatus = ProjectRunnerStatusMonitor()
 
     @State private var isSettingsPresented = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -49,7 +50,9 @@ struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 session: session,
+                engine: engine,
                 vfs: vfs,
+                runnerStatus: runnerStatus,
                 onOpenSettings: openSettings
             )
             .navigationSplitViewColumnWidth(
@@ -62,6 +65,7 @@ struct RootView: View {
                 session: session,
                 engine: engine,
                 vfs: vfs,
+                runnerStatus: runnerStatus,
                 onOpenSettings: openSettings
             )
         }
@@ -87,16 +91,25 @@ struct RootView: View {
             await engine.checkBackendHealth()
             syncVFSConfig()
             vfs.start()
+            refreshRunnerStatus()
         }
         .onChange(of: engine.baseURLString) { _, _ in
             syncVFSConfig()
+            refreshRunnerStatus()
         }
         .onChange(of: engine.apiToken) { _, _ in
             syncVFSConfig()
+            refreshRunnerStatus()
         }
         .onChange(of: vfs.tree) { _, tree in
             guard let tree, let root = vfs.workspaceRoot else { return }
-            session.applyVFSTree(tree, remoteRoot: root)
+            session.applyVFSTree(
+                tree,
+                remoteRoot: root,
+                gitRemote: vfs.workspaceRemote,
+                runnerBaseURL: engine.baseURLString
+            )
+            refreshRunnerStatus()
         }
         .onAppear {
             applySidebarVisibility(showSidebar)
@@ -115,6 +128,10 @@ struct RootView: View {
 
     private func syncVFSConfig() {
         BackendConnectionSync.syncVFS(from: engine, to: vfs)
+    }
+
+    private func refreshRunnerStatus() {
+        runnerStatus.refresh(projects: session.projects, engine: engine)
     }
 
     private func applySidebarVisibility(_ show: Bool) {

@@ -59,15 +59,17 @@ HelmCode/
 
 | State | Content |
 |-------|---------|
-| No project | **Projects** list |
+| No project | **Projects** list (row-trailing runner reachability icons) |
 | Project open | System segmented **navigator**: Files · Search · Bookmarks · Source Control |
+| Project open | Top trailing: global **VFS status** + system **sidebarToggle** |
 | Always | Bottom **Settings** via system `safeAreaBar` + soft scroll-edge fade |
 
 - **Files** — outline tree; **VFS remote** tree when `ws://…/v1/vfs` is connected  
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
-- Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`)  
+- Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`, `SidebarVFSStatusIcon`)  
+- Per-project API probe: `ProjectRunnerStatusMonitor` (list trailing only; not the top VFS glyph)  
 - Project switching lives in the **center toolbar** (not the sidebar)
 
 ### VFS (remote workspace)
@@ -80,8 +82,10 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Auth | Same Bearer token as open-core when configured |
 | Client | `VFSNetworkEngine` — heartbeat, auto-reconnect, request/response map |
 | Methods | `vfs/initialize`, `vfs/read`, `vfs/write`, `vfs/shutdown` |
-| Notifications | `vfs/didChange` → selective buffer reload / tree refresh |
-| URL helpers | `RunnerURL` (HTTP normalize + `ws…/v1/vfs`) · `VFSConnect` (Open Project flow) |
+| Notifications | `vfs/didChange` → selective buffer reload / tree refresh (non-blocking receive) |
+| Editor | Autosave + ⌘S write-back; soft hot-reload keeps open file + scroll |
+| Identity | `initialize.name` / `initialize.remote` for project title / subtitle |
+| URL helpers | `RunnerURL` · `VFSPath` · `VFSConnect` (Open Project self-hosted flow) |
 
 Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`WorkspaceTreeAssembler`) — same tree model as demo catalog projects.
 

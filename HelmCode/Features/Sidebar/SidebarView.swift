@@ -5,14 +5,18 @@
 //  NavigationSplitView sidebar shell:
 //  • No project — Projects list
 //  • Project open — navigator tabs (Files / Search / Bookmarks / SCM)
-//  • Bottom — system safeAreaBar Settings row
+//  • Top bar — system sidebarToggle; global VFS status only when a project is open
+//  • Projects list — per-row runner reachability (list only)
+//  • Bottom — system safeAreaBar Settings row (material / soft edge)
 //
 
 import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var session: WorkspaceSession
+    @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: () -> Void
 
     @AppStorage(AppStorageKey.sidebarNavigator) private var navigatorRaw = SidebarNavigator.files.rawValue
@@ -40,8 +44,27 @@ struct SidebarView: View {
                 projectsList
             }
         }
+        // Empty inline title keeps a standard nav bar so custom + system
+        // toolbar items share the same bar metrics / baseline.
+        .navigationTitle("")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            // Trailing: first item is closest to the edge (system toggle).
+            DefaultToolbarItem(kind: .sidebarToggle, placement: .topBarTrailing)
+            // Global VFS status only while a project is open (hide on welcome / project list).
+            if session.selectedProject != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    SidebarVFSStatusIcon(vfs: vfs)
+                }
+            }
+        }
         .helmSidebarBottomChrome {
             SidebarSettingsBar(action: onOpenSettings)
+        }
+        .task(id: session.projects.map(\.id).joined(separator: ",")) {
+            runnerStatus.refresh(projects: session.projects, engine: engine)
         }
         .alert(dialog?.title ?? "", isPresented: dialogPresented) {
             dialogButtons
@@ -118,7 +141,15 @@ struct SidebarView: View {
                     Button {
                         session.openProject(project.id)
                     } label: {
-                        ProjectListLabel(project: project, secondary: .remote)
+                        ProjectListLabel(
+                            project: project,
+                            secondary: .remote,
+                            runnerStatus: runnerStatus.displayStatus(
+                                for: project,
+                                engine: engine,
+                                vfs: vfs
+                            )
+                        )
                     }
                 }
             } header: {

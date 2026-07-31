@@ -12,6 +12,7 @@ struct EditorDetailView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: (() -> Void)?
 
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
@@ -22,6 +23,8 @@ struct EditorDetailView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            // Sidebar hosts the only system sidebarToggle (+ global VFS status).
+            .toolbar(removing: .sidebarToggle)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     leadingToolbar
@@ -44,6 +47,7 @@ struct EditorDetailView: View {
                 session: session,
                 engine: engine,
                 vfs: vfs,
+                runnerStatus: runnerStatus,
                 onOpenSettings: onOpenSettings
             )
         case .emptyProject(let project):

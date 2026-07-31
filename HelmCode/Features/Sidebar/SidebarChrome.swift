@@ -45,6 +45,35 @@ struct SidebarEmptyPlaceholder: View {
     }
 }
 
+// MARK: - VFS status (sidebar top trailing, with system collapse)
+
+/// Global VFS connection glyph for the sidebar **system** toolbar (top trailing).
+/// Shown only when a project is open (`SidebarView` gates placement).
+/// Independent of per-project list trailing icons (`ProjectRunnerStatusIcon`).
+struct SidebarVFSStatusIcon: View {
+    @ObservedObject var vfs: VFSNetworkEngine
+
+    var body: some View {
+        let state = vfs.connectionState
+        Label(state.shortTitle, systemImage: state.toolbarSystemImage)
+            .labelStyle(.iconOnly)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(state.toolbarTint)
+            .accessibilityLabel(state.shortTitle)
+            .help(helpText)
+    }
+
+    private var helpText: String {
+        var parts = [vfs.connectionState.shortTitle]
+        if let name = vfs.workspaceName, !name.isEmpty {
+            parts.append(name)
+        } else if let root = vfs.workspaceRoot, !root.isEmpty {
+            parts.append(root)
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
 // MARK: - Settings bar
 
 /// Settings row in the system bottom safe-area bar.

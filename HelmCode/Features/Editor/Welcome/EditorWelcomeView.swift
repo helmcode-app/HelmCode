@@ -11,6 +11,7 @@ struct EditorWelcomeView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: (() -> Void)?
 
     @State private var isOpenProjectPresented = false
@@ -53,8 +54,14 @@ struct EditorWelcomeView: View {
         .sheet(isPresented: $isBrowseProjectsPresented) {
             BrowseProjectsSheet(
                 session: session,
+                engine: engine,
+                vfs: vfs,
+                runnerStatus: runnerStatus,
                 isPresented: $isBrowseProjectsPresented
             )
+        }
+        .task {
+            runnerStatus.refresh(projects: session.projects, engine: engine)
         }
     }
 
@@ -188,7 +195,12 @@ struct EditorWelcomeView: View {
                 title: project.name,
                 subtitle: project.branchRemoteLine,
                 subtitleMonospaced: true,
-                systemImage: "folder.fill"
+                systemImage: "folder.fill",
+                runnerStatus: runnerStatus.displayStatus(
+                    for: project,
+                    engine: engine,
+                    vfs: vfs
+                )
             )
         }
         .buttonStyle(.plain)
@@ -206,6 +218,7 @@ struct EditorWelcomeView: View {
     EditorWelcomeView(
         session: WorkspaceSession(),
         engine: HelmCodeNetworkEngine(),
-        vfs: VFSNetworkEngine()
+        vfs: VFSNetworkEngine(),
+        runnerStatus: ProjectRunnerStatusMonitor()
     )
 }

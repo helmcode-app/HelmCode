@@ -56,15 +56,18 @@ struct VFSInitializeResult: Codable, Sendable, Equatable {
     let root: String
     /// Human-facing project name from runner (git remote / env); optional for older servers.
     let name: String?
+    /// Git origin display string (e.g. `github.com/org/repo`); optional for older servers.
+    let remote: String?
     let entries: [RawFileNode]
 
     enum CodingKeys: String, CodingKey {
-        case root, name, entries
+        case root, name, remote, entries
     }
 
-    init(root: String, name: String? = nil, entries: [RawFileNode]) {
+    init(root: String, name: String? = nil, remote: String? = nil, entries: [RawFileNode]) {
         self.root = root
         self.name = name
+        self.remote = remote
         self.entries = entries
     }
 
@@ -72,6 +75,7 @@ struct VFSInitializeResult: Codable, Sendable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         root = try container.decode(String.self, forKey: .root)
         name = try container.decodeIfPresent(String.self, forKey: .name)
+        remote = try container.decodeIfPresent(String.self, forKey: .remote)
         entries = try container.decode([RawFileNode].self, forKey: .entries)
     }
 }

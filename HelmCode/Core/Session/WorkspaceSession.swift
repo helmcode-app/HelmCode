@@ -55,23 +55,10 @@ final class WorkspaceSession: ObservableObject {
         guard let project = selectedProject, let id = selectedFileID else { return nil }
         if let node = project.root.find(id: id) { return node }
         // Tree refresh / atomic save can briefly omit a path; keep the editor open
-        // via a stable synthetic node (vfs:relative/path ids).
-        if id.hasPrefix("vfs:") {
-            let path = String(id.dropFirst(4))
-            if let byPath = project.root.find(path: path) { return byPath }
-            if !path.isEmpty {
-                let name = (path as NSString).lastPathComponent
-                return WorkspaceNode(
-                    id: id,
-                    name: name,
-                    path: path,
-                    isDirectory: false,
-                    children: [],
-                    languageHint: FileLanguageHint.resolve(fileName: name)
-                )
-            }
-        }
-        return nil
+        // via a stable synthetic node (`vfs:relative/path` ids).
+        guard let path = WorkspaceNode.pathFromVFSNodeID(id) else { return nil }
+        if let byPath = project.root.find(path: path) { return byPath }
+        return WorkspaceNode.vfsPlaceholder(path: path, id: id)
     }
 
     var editorSurface: EditorSurface {

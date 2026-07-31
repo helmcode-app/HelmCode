@@ -20,6 +20,8 @@ final class VFSNetworkEngine: ObservableObject {
     @Published private(set) var workspaceRoot: String?
     /// Display name from `vfs/initialize` (git remote / env), not mount basename.
     @Published private(set) var workspaceName: String?
+    /// Git origin display string from `vfs/initialize` (not container path).
+    @Published private(set) var workspaceRemote: String?
     @Published private(set) var tree: WorkspaceNode?
     @Published private(set) var lastError: String?
     @Published private(set) var lastChange: VFSDidChangeParams?
@@ -121,6 +123,8 @@ final class VFSNetworkEngine: ObservableObject {
         let trimmed = result.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let displayName: String? = trimmed.isEmpty ? nil : trimmed
         workspaceName = displayName
+        let remoteTrimmed = result.remote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        workspaceRemote = remoteTrimmed.isEmpty ? nil : remoteTrimmed
         let assembled = WorkspaceTreeAssembler.assemble(
             entries: result.entries,
             rootPath: result.root,
@@ -128,7 +132,7 @@ final class VFSNetworkEngine: ObservableObject {
         )
         tree = assembled
         log.info(
-            "vfs/initialize root=\(result.root, privacy: .public) name=\(displayName ?? "—", privacy: .public) entries=\(result.entries.count)"
+            "vfs/initialize root=\(result.root, privacy: .public) name=\(displayName ?? "—", privacy: .public) remote=\(self.workspaceRemote ?? "—", privacy: .public) entries=\(result.entries.count)"
         )
         return result
     }

@@ -13,27 +13,39 @@ extension WorkspaceSession {
 
     /// Install / refresh the remote workspace project from a nested VFS tree.
     /// Preserves the open file when the path still exists after a tree refresh.
-    func applyVFSTree(_ tree: WorkspaceNode, remoteRoot: String) {
+    /// - Parameters:
+    ///   - remoteRoot: Server workspace absolute path (internal only).
+    ///   - gitRemote: Git origin display string from `vfs/initialize.remote`.
+    func applyVFSTree(
+        _ tree: WorkspaceNode,
+        remoteRoot: String,
+        gitRemote: String? = nil,
+        runnerBaseURL: String? = nil
+    ) {
         let vfsID = WorkspaceProject.vfsRemoteID
+        let existing = projects.first(where: { $0.id == vfsID })
+        let resolvedURL = runnerBaseURL ?? existing?.runnerBaseURL
+        let displayRemote = WorkspaceProject.resolveDisplayRemote(
+            gitRemote: gitRemote,
+            previousRemote: existing?.remote,
+            fallbackRoot: remoteRoot
+        )
         let project = WorkspaceProject(
             id: vfsID,
             name: tree.name,
-            remote: remoteRoot,
+            remote: displayRemote,
             defaultBranch: "main",
-            root: tree
+            root: tree,
+            runnerBaseURL: resolvedURL
         )
 
         let previousSelection = selectedFileID
-        let previousPath: String? = {
-            guard let id = previousSelection else { return nil }
-            if let existing = projects.first(where: { $0.id == vfsID })?.root.find(id: id) {
-                return existing.path
-            }
-            if id.hasPrefix("vfs:") { return String(id.dropFirst(4)) }
-            return nil
-        }()
+        let previousPath = previousSelection.flatMap { id in
+            if let node = existing?.root.find(id: id) { return node.path }
+            return WorkspaceNode.pathFromVFSNodeID(id)
+        }
 
-        let isFirstInstall = !projects.contains(where: { $0.id == vfsID })
+        let isFirstInstall = existing == nil
 
         if let idx = projects.firstIndex(where: { $0.id == vfsID }) {
             projects[idx] = project
@@ -48,8 +60,7 @@ extension WorkspaceSession {
 
         guard selectedProjectID == vfsID else { return }
 
-        // Tree refresh: rebind by path first so atomic save (remove+create) and
-        // re-walked trees never bounce the center column to empty state.
+        // Rebind by path first so atomic save (remove+create) never clears the editor.
         if let path = previousPath, let node = project.root.find(path: path) {
             selectedFileID = node.id
         } else if let previousSelection, project.root.find(id: previousSelection) != nil {

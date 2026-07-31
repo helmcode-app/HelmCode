@@ -32,7 +32,8 @@ extension WorkspaceProject {
             name: name,
             remote: remote,
             defaultBranch: defaultBranch,
-            root: root
+            root: root,
+            runnerBaseURL: runnerBaseURL
         )
     }
 }

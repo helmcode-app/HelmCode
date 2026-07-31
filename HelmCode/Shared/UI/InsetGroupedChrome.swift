@@ -46,7 +46,7 @@ struct InsetGroupedRowDivider: View {
     }
 }
 
-/// Leading icon + title/subtitle + optional chevron row used in grouped cards.
+/// Leading icon + title/subtitle + optional trailing status + chevron.
 struct IconListRow: View {
     let title: String
     var subtitle: String? = nil
@@ -54,6 +54,7 @@ struct IconListRow: View {
     let systemImage: String
     var isEnabled: Bool = true
     var showsChevron: Bool = true
+    var runnerStatus: ProjectRunnerReachability? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -76,6 +77,10 @@ struct IconListRow: View {
 
             Spacer(minLength: 0)
 
+            if let runnerStatus {
+                ProjectRunnerStatusIcon(status: runnerStatus)
+            }
+
             if showsChevron && isEnabled {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -88,10 +93,11 @@ struct IconListRow: View {
     }
 }
 
-/// Folder icon + name + secondary line for project lists (sidebar / pickers).
+/// Folder icon + name + secondary line + trailing runner status (sidebar / pickers).
 struct ProjectListLabel: View {
     let project: WorkspaceProject
     var secondary: ProjectSecondary = .remote
+    var runnerStatus: ProjectRunnerReachability = .none
 
     enum ProjectSecondary {
         case remote
@@ -99,17 +105,23 @@ struct ProjectListLabel: View {
     }
 
     var body: some View {
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                Text(secondaryText)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        HStack(spacing: 10) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(project.name)
+                    Text(secondaryText)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } icon: {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(Color.accentColor)
             }
-        } icon: {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(Color.accentColor)
+
+            Spacer(minLength: 8)
+
+            ProjectRunnerStatusIcon(status: runnerStatus)
         }
     }
 

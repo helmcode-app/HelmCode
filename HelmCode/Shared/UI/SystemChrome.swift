@@ -49,4 +49,32 @@ extension VFSConnectionState {
     var statusForeground: Color {
         isReady ? Color.secondary : Color.orange
     }
+
+    /// Sidebar toolbar glyph (global VFS tunnel state).
+    var toolbarSystemImage: String {
+        switch self {
+        case .connected:
+            return "externaldrive.connected.to.line.below"
+        case .connecting, .reconnecting:
+            return "externaldrive.badge.icloud"
+        case .failed:
+            return "externaldrive.badge.xmark"
+        case .disconnected:
+            return "externaldrive.badge.minus"
+        }
+    }
+
+    /// Sidebar toolbar tint for connection health.
+    var toolbarTint: Color {
+        switch self {
+        case .connected:
+            return .green
+        case .connecting, .reconnecting:
+            return .orange
+        case .failed:
+            return .red
+        case .disconnected:
+            return .secondary
+        }
+    }
 }

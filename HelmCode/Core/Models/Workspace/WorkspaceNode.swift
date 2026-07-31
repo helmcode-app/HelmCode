@@ -16,15 +16,56 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
     let remote: String
     let defaultBranch: String
     let root: WorkspaceNode
+    /// Runner-core HTTP base URL for this project (`nil` = local/demo, no remote API).
+    let runnerBaseURL: String?
+
+    init(
+        id: String,
+        name: String,
+        remote: String,
+        defaultBranch: String,
+        root: WorkspaceNode,
+        runnerBaseURL: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.remote = remote
+        self.defaultBranch = defaultBranch
+        self.root = root
+        self.runnerBaseURL = runnerBaseURL
+    }
 
     /// Remote runner-core VFS project (single active remote workspace today).
     var isVFSRemote: Bool {
         id == Self.vfsRemoteID
     }
 
+    /// Normalized runner URL for connectivity probes / matching the active engine.
+    var normalizedRunnerURL: String? {
+        guard let raw = runnerBaseURL, RunnerURL.isValid(raw) else { return nil }
+        return RunnerURL.normalizeHTTP(raw)
+    }
+
     /// e.g. `main  ·  github.com/…`
     var branchRemoteLine: String {
         "\(defaultBranch)  ·  \(remote)"
+    }
+
+    /// Prefer git origin for UI; avoid showing container mount paths when possible.
+    static func resolveDisplayRemote(
+        gitRemote: String?,
+        previousRemote: String?,
+        fallbackRoot: String
+    ) -> String {
+        let trimmed = gitRemote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        if let previousRemote,
+           !previousRemote.isEmpty,
+           previousRemote != fallbackRoot,
+           !previousRemote.hasPrefix("/") {
+            return previousRemote
+        }
+        return fallbackRoot
     }
 }
 
@@ -87,5 +128,27 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
             child.collectFiles(into: &result, limit: limit)
             if result.count >= limit { return }
         }
+    }
+
+    /// Stable leaf used when a VFS tree refresh briefly drops a path (atomic save, re-walk).
+    /// Id form: `vfs:<relative/path>`.
+    static func vfsPlaceholder(path: String, id: String? = nil) -> WorkspaceNode {
+        let normalized = VFSPath.normalize(path)
+        let name = VFSPath.fileName(of: normalized)
+        return WorkspaceNode(
+            id: id ?? "vfs:\(normalized)",
+            name: name,
+            path: normalized,
+            isDirectory: false,
+            children: [],
+            languageHint: FileLanguageHint.resolve(fileName: name)
+        )
+    }
+
+    /// Extract relative path from a `vfs:…` node id, if present.
+    static func pathFromVFSNodeID(_ id: WorkspaceNode.ID) -> String? {
+        guard id.hasPrefix("vfs:") else { return nil }
+        let path = String(id.dropFirst(4))
+        return path.isEmpty ? nil : path
     }
 }

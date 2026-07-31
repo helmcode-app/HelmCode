@@ -59,7 +59,12 @@ enum VFSConnect {
 
         for _ in 0..<waitAttempts {
             if vfs.connectionState.isReady, let tree = vfs.tree, let root = vfs.workspaceRoot {
-                session.applyVFSTree(tree, remoteRoot: root)
+                session.applyVFSTree(
+                    tree,
+                    remoteRoot: root,
+                    gitRemote: vfs.workspaceRemote,
+                    runnerBaseURL: engine.baseURLString
+                )
                 return .opened
             }
             if case .failed(let message) = vfs.connectionState {
