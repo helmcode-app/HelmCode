@@ -30,14 +30,7 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
 
     var systemImage: String {
         if isDirectory { return "folder.fill" }
-        switch languageHint {
-        case "swift": return "swift"
-        case "ts", "js": return "curlybraces"
-        case "json": return "curlybraces.square"
-        case "md": return "doc.richtext"
-        case "go": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc.text"
-        }
+        return FileLanguageHint.systemImageName(forLanguageHint: languageHint, filled: false)
     }
 
     /// `OutlineGroup` expects optional children — files yield `nil`.

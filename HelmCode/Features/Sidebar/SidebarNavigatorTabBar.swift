@@ -21,10 +21,7 @@ struct SidebarNavigatorTabBar: View {
                     .accessibilityLabel(accessibilityLabel(for: nav))
             }
         }
-        .pickerStyle(.segmented)
-        .controlSize(.large)
-        // Selected segment / glyph follows the app tint (list selection blue).
-        .tint(Color.accentColor)
+        .helmLargeSegmentedStyle()
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }

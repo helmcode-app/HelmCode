@@ -40,17 +40,7 @@ extension WorkspaceProject {
 extension WorkspaceNode {
     /// Infer editor language from a file name extension.
     static func languageHint(forFileName name: String) -> String? {
-        let ext = (name as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "ts", "tsx": return "ts"
-        case "js", "jsx", "mjs", "cjs": return "js"
-        case "json": return "json"
-        case "md", "markdown": return "md"
-        case "go": return "go"
-        case "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "mm", "m": return "cpp"
-        default: return nil
-        }
+        FileLanguageHint.resolve(fileName: name)
     }
 
     static func sanitizeName(_ raw: String) -> String? {
@@ -130,7 +120,7 @@ extension WorkspaceNode {
     ) -> Result<(tree: WorkspaceNode, node: WorkspaceNode), WorkspaceTreeError> {
         guard id != self.id else { return .failure(.cannotModifyRoot) }
         guard let name = Self.sanitizeName(rawName) else { return .failure(.invalidName) }
-        guard let existing = find(id: id) else { return .failure(.notFound) }
+        guard find(id: id) != nil else { return .failure(.notFound) }
         guard let parentID = parentID(of: id), let parent = find(id: parentID) else {
             return .failure(.notFound)
         }

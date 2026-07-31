@@ -12,6 +12,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var session: WorkspaceSession
+    @ObservedObject var vfs: VFSNetworkEngine
     var onOpenSettings: () -> Void
 
     @AppStorage(AppStorageKey.sidebarNavigator) private var navigatorRaw = SidebarNavigator.files.rawValue
@@ -92,6 +93,7 @@ struct SidebarView: View {
         case .files:
             SidebarFilesView(
                 session: session,
+                vfs: vfs,
                 project: project,
                 onPresentDialog: present(_:)
             )

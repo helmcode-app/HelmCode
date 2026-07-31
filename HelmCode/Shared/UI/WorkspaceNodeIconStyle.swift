@@ -16,14 +16,7 @@ enum WorkspaceNodeIconStyle {
 
     /// SF Symbol for a language hint (or generic file).
     static func systemImage(forLanguageHint hint: String?) -> String {
-        switch hint {
-        case "swift": return "swift"
-        case "ts", "js": return "curlybraces"
-        case "json": return "curlybraces.square"
-        case "md": return "doc.richtext"
-        case "go": return "chevron.left.forwardslash.chevron.right"
-        default: return "doc.text"
-        }
+        FileLanguageHint.systemImageName(forLanguageHint: hint, filled: false)
     }
 
     /// Idle icon tint from language hint only (search headers, etc.).

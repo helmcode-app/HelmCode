@@ -14,6 +14,7 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var engine: HelmCodeNetworkEngine
+    @EnvironmentObject private var vfs: VFSNetworkEngine
     @StateObject private var session = WorkspaceSession()
 
     @State private var isSettingsPresented = false
@@ -48,6 +49,7 @@ struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 session: session,
+                vfs: vfs,
                 onOpenSettings: openSettings
             )
             .navigationSplitViewColumnWidth(
@@ -59,6 +61,7 @@ struct RootView: View {
             EditorDetailView(
                 session: session,
                 engine: engine,
+                vfs: vfs,
                 onOpenSettings: openSettings
             )
         }
@@ -76,15 +79,28 @@ struct RootView: View {
         .preferredColorScheme(appearance.preferredColorScheme)
         .sheet(isPresented: $isSettingsPresented) {
             NavigationStack {
-                SettingsView(engine: engine)
+                SettingsView(engine: engine, vfs: vfs)
             }
             .preferredColorScheme(appearance.preferredColorScheme)
         }
         .task {
             await engine.checkBackendHealth()
+            syncVFSConfig()
+            vfs.start()
+        }
+        .onChange(of: engine.baseURLString) { _, _ in
+            syncVFSConfig()
+        }
+        .onChange(of: engine.apiToken) { _, _ in
+            syncVFSConfig()
+        }
+        .onChange(of: vfs.tree) { _, tree in
+            guard let tree, let root = vfs.workspaceRoot else { return }
+            session.applyVFSTree(tree, remoteRoot: root)
         }
         .onAppear {
             applySidebarVisibility(showSidebar)
+            syncVFSConfig()
         }
         .onChange(of: showSidebar) { _, show in
             applySidebarVisibility(show)
@@ -95,6 +111,11 @@ struct RootView: View {
                 showSidebar = visible
             }
         }
+    }
+
+    private func syncVFSConfig() {
+        vfs.baseURLString = engine.baseURLString
+        vfs.apiToken = engine.apiToken
     }
 
     private func applySidebarVisibility(_ show: Bool) {
@@ -110,16 +131,19 @@ struct RootView: View {
 #Preview("System") {
     RootView()
         .environmentObject(HelmCodeNetworkEngine())
+        .environmentObject(VFSNetworkEngine())
 }
 
 #Preview("Light") {
     RootView()
         .environmentObject(HelmCodeNetworkEngine())
+        .environmentObject(VFSNetworkEngine())
         .preferredColorScheme(.light)
 }
 
 #Preview("Dark") {
     RootView()
         .environmentObject(HelmCodeNetworkEngine())
+        .environmentObject(VFSNetworkEngine())
         .preferredColorScheme(.dark)
 }

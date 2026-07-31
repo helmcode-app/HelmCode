@@ -9,15 +9,15 @@ HelmCode/
 ├── App/                 # @main, RootView (NavigationSplitView + .inspector)
 ├── Core/
 │   ├── Models/          # API + workspace domain types
-│   ├── Network/         # RunnerCoreAPIClient + HelmCodeNetworkEngine
+│   ├── Network/         # HTTP task client + VFS WebSocket JSON-RPC
 │   ├── Preferences/     # AppStorage keys, layout metrics, appearance
-│   └── Session/         # WorkspaceSession (+ Tree / Bookmarks / SCM)
+│   └── Session/         # WorkspaceSession (+ Tree / Bookmarks / SCM / VFS)
 ├── Features/
 │   ├── Sidebar/         # Projects · navigator + system bottom Settings bar
-│   ├── Editor/          # Welcome · empty project · CodeMirror canvas
+│   ├── Editor/          # Welcome · Open Project · CodeMirror canvas
 │   ├── Commander/       # System inspector: task prompt + timeline
 │   └── Settings/        # Appearance / layout / backend / shortcuts
-├── Shared/UI/           # Toolbar labels, inset cards, status dot, inspector toggle
+├── Shared/UI/           # System chrome, search field, inset cards, toggles
 └── …/CodeMirror/        # index.html + editor.bundle.js (offline CM6)
 ```
 
@@ -44,6 +44,9 @@ HelmCode/
 | Project open, no file | `EditorEmptyStateView` | Project switcher |
 | File selected | `EditorCanvasView` | Project switcher + file name |
 
+**Welcome → Open Project:** Hosted (placeholder) | Self-hosted URL (`OpenProjectSheet`).  
+**Recent:** up to 5 rows; **More…** opens `BrowseProjectsSheet` when there are more.
+
 ### Sidebar
 
 | State | Content |
@@ -52,12 +55,27 @@ HelmCode/
 | Project open | System segmented **navigator**: Files · Search · Bookmarks · Source Control |
 | Always | Bottom **Settings** via system `safeAreaBar` + soft scroll-edge fade |
 
-- **Files** — outline tree; create / rename / delete / file bookmark via context menu  
+- **Files** — outline tree; **VFS remote** tree when `ws://…/v1/vfs` is connected  
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
 - Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`)  
 - Project switching lives in the **center toolbar** (not the sidebar)
+
+### VFS (remote workspace)
+
+Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runner-core`):
+
+| Item | Value |
+|------|--------|
+| Endpoint | `ws(s)://<host>/v1/vfs` (from Backend base URL) |
+| Auth | Same Bearer token as open-core when configured |
+| Client | `VFSNetworkEngine` — heartbeat, auto-reconnect, request/response map |
+| Methods | `vfs/initialize`, `vfs/read`, `vfs/write`, `vfs/shutdown` |
+| Notifications | `vfs/didChange` → selective buffer reload / tree refresh |
+| URL helpers | `RunnerURL` (HTTP normalize + `ws…/v1/vfs`) · `VFSConnect` (Open Project flow) |
+
+Flat `entries` from initialize are assembled client-side into `WorkspaceTreeNode` (`WorkspaceTreeAssembler`).
 
 ## Backend
 

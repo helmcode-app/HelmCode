@@ -6,15 +6,28 @@
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct EditorWelcomeView: View {
     @ObservedObject var session: WorkspaceSession
+    @ObservedObject var engine: HelmCodeNetworkEngine
+    @ObservedObject var vfs: VFSNetworkEngine
     var onOpenSettings: (() -> Void)?
 
-    @State private var isProjectPickerPresented = false
+    @State private var isOpenProjectPresented = false
+    @State private var isBrowseProjectsPresented = false
+
+    private enum Metrics {
+        /// Recent list on the welcome page (More opens the full browser).
+        static let recentVisibleLimit = 5
+    }
+
+    private var recentVisible: [WorkspaceProject] {
+        Array(session.recentProjects.prefix(Metrics.recentVisibleLimit))
+    }
+
+    private var hasMoreRecents: Bool {
+        session.recentProjects.count > Metrics.recentVisibleLimit
+    }
 
     var body: some View {
         ScrollView {
@@ -29,8 +42,19 @@ struct EditorWelcomeView: View {
             .padding(.vertical, 48)
         }
         .background(Color(.systemBackground))
-        .sheet(isPresented: $isProjectPickerPresented) {
-            OpenProjectSheet(session: session, isPresented: $isProjectPickerPresented)
+        .sheet(isPresented: $isOpenProjectPresented) {
+            OpenProjectSheet(
+                session: session,
+                engine: engine,
+                vfs: vfs,
+                isPresented: $isOpenProjectPresented
+            )
+        }
+        .sheet(isPresented: $isBrowseProjectsPresented) {
+            BrowseProjectsSheet(
+                session: session,
+                isPresented: $isBrowseProjectsPresented
+            )
         }
     }
 
@@ -66,10 +90,10 @@ struct EditorWelcomeView: View {
             InsetGroupedCard {
                 startRow(
                     title: "Open Project…",
-                    systemImage: "folder",
-                    detail: "Choose from available workspaces"
+                    systemImage: "folder.badge.plus",
+                    detail: "Hosted or self-hosted runner"
                 ) {
-                    isProjectPickerPresented = true
+                    isOpenProjectPresented = true
                 }
 
                 InsetGroupedRowDivider()
@@ -100,20 +124,39 @@ struct EditorWelcomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionCaption(title: "Recent")
 
-            if session.recentProjects.isEmpty {
+            if recentVisible.isEmpty {
                 Text("No recent projects yet. Open a project to get started.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
                 InsetGroupedCard {
-                    ForEach(Array(session.recentProjects.enumerated()), id: \.element.id) { index, project in
+                    ForEach(Array(recentVisible.enumerated()), id: \.element.id) { index, project in
                         if index > 0 { InsetGroupedRowDivider() }
                         recentProjectRow(project)
+                    }
+
+                    // Full catalog browser (previous Open Project list).
+                    if hasMoreRecents {
+                        InsetGroupedRowDivider()
+                        moreRow
                     }
                 }
             }
         }
+    }
+
+    private var moreRow: some View {
+        Button {
+            isBrowseProjectsPresented = true
+        } label: {
+            IconListRow(
+                title: "More…",
+                subtitle: "Browse all projects",
+                systemImage: "ellipsis.circle"
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Rows
@@ -160,5 +203,9 @@ struct EditorWelcomeView: View {
 }
 
 #Preview {
-    EditorWelcomeView(session: WorkspaceSession())
+    EditorWelcomeView(
+        session: WorkspaceSession(),
+        engine: HelmCodeNetworkEngine(),
+        vfs: VFSNetworkEngine()
+    )
 }

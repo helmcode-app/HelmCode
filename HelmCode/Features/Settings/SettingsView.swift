@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var engine: HelmCodeNetworkEngine
+    @ObservedObject var vfs: VFSNetworkEngine
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(AppStorageKey.appearance) private var appearanceRaw = AppearancePreference.system.rawValue
@@ -33,15 +34,8 @@ struct SettingsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .accessibilityLabel("Close")
-            }
+        .helmSheetCloseToolbar {
+            dismiss()
         }
         .onAppear {
             draftBaseURL = engine.baseURLString
@@ -130,10 +124,18 @@ struct SettingsView: View {
                 .disabled(isRefreshing)
                 .accessibilityLabel("Refresh health")
             }
+            LabeledContent("VFS") {
+                Text(vfs.connectionState.shortTitle)
+                    .foregroundStyle(vfs.connectionState.isReady ? Color.secondary : Color.orange)
+                    .multilineTextAlignment(.trailing)
+            }
+            if let root = vfs.workspaceRoot {
+                LabeledContent("VFS Root", value: root)
+            }
         } header: {
             Text("Backend")
         } footer: {
-            Text("Connects to runner-core open-core HTTP (default http://127.0.0.1:8080). Bearer token is required when OPENCORE_API_TOKEN is set.")
+            Text("HTTP: open-core task API. VFS: WebSocket JSON-RPC at /v1/vfs (helm-vfs). Bearer token applies to both when OPENCORE_API_TOKEN is set.")
         }
     }
 
@@ -159,12 +161,18 @@ struct SettingsView: View {
     // MARK: - Backend
 
     private func applyBackendDraft() {
-        let url = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !url.isEmpty {
+        let raw = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty {
+            let url = RunnerURL.normalizeHTTP(raw)
+            draftBaseURL = url
             engine.baseURLString = url
+            vfs.baseURLString = url
         }
-        engine.apiToken = draftToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = draftToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        engine.apiToken = token
+        vfs.apiToken = token
         Task { await refreshHealth() }
+        vfs.start()
     }
 
     private func refreshHealth() async {
@@ -176,6 +184,6 @@ struct SettingsView: View {
 
 #Preview {
     NavigationStack {
-        SettingsView(engine: HelmCodeNetworkEngine())
+        SettingsView(engine: HelmCodeNetworkEngine(), vfs: VFSNetworkEngine())
     }
 }

@@ -11,6 +11,7 @@ import SwiftUI
 struct EditorDetailView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
+    @ObservedObject var vfs: VFSNetworkEngine
     var onOpenSettings: (() -> Void)?
 
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
@@ -39,11 +40,22 @@ struct EditorDetailView: View {
     private var surfaceContent: some View {
         switch session.editorSurface {
         case .welcome:
-            EditorWelcomeView(session: session, onOpenSettings: onOpenSettings)
+            EditorWelcomeView(
+                session: session,
+                engine: engine,
+                vfs: vfs,
+                onOpenSettings: onOpenSettings
+            )
         case .emptyProject(let project):
             EditorEmptyStateView(project: project, onOpenFile: { session.openFile($0) })
         case .editing(let project, let file):
-            EditorCanvasView(project: project, file: file, session: session, engine: engine)
+            EditorCanvasView(
+                project: project,
+                file: file,
+                session: session,
+                engine: engine,
+                vfs: vfs
+            )
         }
     }
 
