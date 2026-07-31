@@ -3,7 +3,8 @@
 //  HelmCode
 //
 //  Open project / file selection, recents, and editor surface routing.
-//  Tree · bookmarks · source control live in WorkspaceSession+*.swift.
+//  Extensions: +Persistence · +Tree · +Bookmarks · +SourceControl · +VFS
+//  Projects are created only via Open Project and persisted to disk.
 //
 
 import Combine
@@ -11,8 +12,12 @@ import Foundation
 
 @MainActor
 final class WorkspaceSession: ObservableObject {
-    @Published var projects: [WorkspaceProject]
-    @Published var selectedProjectID: WorkspaceProject.ID?
+    @Published var projects: [WorkspaceProject] {
+        didSet { persistProjects() }
+    }
+    @Published var selectedProjectID: WorkspaceProject.ID? {
+        didSet { persistLastSelectedProjectID() }
+    }
     @Published var selectedFileID: WorkspaceNode.ID?
     /// Mutated only by session (recents / open project).
     @Published var recentProjectIDs: [WorkspaceProject.ID]
@@ -30,18 +35,23 @@ final class WorkspaceSession: ObservableObject {
     /// SCM cache keyed by project so reopening restores working-tree status.
     var sourceControlByProject: [WorkspaceProject.ID: SourceControlState] = [:]
 
+    /// Skip disk writes while reconstructing state in `init` (`+Persistence`).
+    var isRestoring = true
+
     init(
         projects: [WorkspaceProject]? = nil,
         defaults: UserDefaults = .standard
     ) {
-        let resolved = projects ?? WorkspaceCatalog.projects
-        self.projects = resolved
         self.defaults = defaults
-        self.selectedProjectID = nil
+        let resolved = projects ?? Self.loadSavedProjects(from: defaults)
+        self.projects = resolved
         self.selectedFileID = nil
         self.recentProjectIDs = Self.loadRecentIDs(from: defaults, known: resolved)
         self.bookmarks = Self.loadBookmarks(from: defaults)
         self.sourceControl = nil
+        // Welcome first; project list stays cached from disk.
+        self.selectedProjectID = nil
+        self.isRestoring = false
     }
 
     // MARK: - Selection
@@ -54,8 +64,6 @@ final class WorkspaceSession: ObservableObject {
     var selectedFile: WorkspaceNode? {
         guard let project = selectedProject, let id = selectedFileID else { return nil }
         if let node = project.root.find(id: id) { return node }
-        // Tree refresh / atomic save can briefly omit a path; keep the editor open
-        // via a stable synthetic node (`vfs:relative/path` ids).
         guard let path = WorkspaceNode.pathFromVFSNodeID(id) else { return nil }
         if let byPath = project.root.find(path: path) { return byPath }
         return WorkspaceNode.vfsPlaceholder(path: path, id: id)
@@ -83,6 +91,9 @@ final class WorkspaceSession: ObservableObject {
         recordRecent(id)
         if sourceControlByProject[id] == nil {
             sourceControlByProject[id] = SourceControlState.seed(for: project)
+        } else if var sc = sourceControlByProject[id] {
+            sc.applyBranch(from: project)
+            sourceControlByProject[id] = sc
         }
         sourceControl = sourceControlByProject[id]
         pruneBookmarks(for: project)
@@ -96,6 +107,18 @@ final class WorkspaceSession: ObservableObject {
         selectedFileID = nil
         sourceControl = nil
         pendingEditorRevealLine = nil
+    }
+
+    /// Remove a saved project from the local catalog (and recents).
+    func removeProject(_ id: WorkspaceProject.ID) {
+        if selectedProjectID == id {
+            closeProject()
+        }
+        projects.removeAll { $0.id == id }
+        recentProjectIDs.removeAll { $0 == id }
+        sourceControlByProject[id] = nil
+        persistRecent()
+        persistProjects()
     }
 
     func openFile(_ id: WorkspaceNode.ID, revealLine: Int? = nil) {
@@ -137,29 +160,5 @@ final class WorkspaceSession: ObservableObject {
         }
         recentProjectIDs = next
         persistRecent()
-    }
-
-    func persistRecent() {
-        defaults.set(recentProjectIDs.joined(separator: ","), forKey: AppStorageKey.recentProjectIDs)
-    }
-
-    private static func loadRecentIDs(
-        from defaults: UserDefaults,
-        known projects: [WorkspaceProject]
-    ) -> [WorkspaceProject.ID] {
-        let knownIDs = Set(projects.map(\.id))
-        if let raw = defaults.string(forKey: AppStorageKey.recentProjectIDs), !raw.isEmpty {
-            let parsed = raw.split(separator: ",").map(String.init).filter { knownIDs.contains($0) }
-            if !parsed.isEmpty { return parsed }
-        }
-        return projects.map(\.id)
-    }
-
-    static func loadBookmarks(from defaults: UserDefaults) -> [WorkspaceBookmark] {
-        guard let data = defaults.data(forKey: AppStorageKey.workspaceBookmarks),
-              let decoded = try? JSONDecoder().decode([WorkspaceBookmark].self, from: data) else {
-            return []
-        }
-        return decoded
     }
 }

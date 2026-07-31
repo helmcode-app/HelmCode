@@ -18,6 +18,10 @@ enum AppStorageKey {
     static let commanderWidth = "helm.column.commanderWidth"
     /// Comma-separated project ids, most-recent first.
     static let recentProjectIDs = "helm.workspace.recentProjectIDs"
+    /// JSON-encoded `[SavedProjectRecord]` (Open Project list; trees reloaded from VFS).
+    static let savedProjects = "helm.workspace.savedProjects"
+    /// Last open project id (restored on launch when still in the saved list).
+    static let lastSelectedProjectID = "helm.workspace.lastSelectedProjectID"
     /// JSON-encoded `[WorkspaceBookmark]`.
     static let workspaceBookmarks = "helm.workspace.bookmarks"
     /// Selected sidebar navigator tab (`SidebarNavigator.rawValue`).

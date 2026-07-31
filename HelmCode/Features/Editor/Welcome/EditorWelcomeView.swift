@@ -210,6 +210,11 @@ struct EditorWelcomeView: View {
             } label: {
                 Label("Remove from Recents", systemImage: "trash")
             }
+            Button(role: .destructive) {
+                session.removeProject(project.id)
+            } label: {
+                Label("Remove Project", systemImage: "folder.badge.minus")
+            }
         }
     }
 }

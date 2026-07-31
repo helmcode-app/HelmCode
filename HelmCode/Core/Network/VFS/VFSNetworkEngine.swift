@@ -22,6 +22,8 @@ final class VFSNetworkEngine: ObservableObject {
     @Published private(set) var workspaceName: String?
     /// Git origin display string from `vfs/initialize` (not container path).
     @Published private(set) var workspaceRemote: String?
+    /// Current HEAD branch from `vfs/initialize` (empty when detached / unknown).
+    @Published private(set) var workspaceBranch: String?
     @Published private(set) var tree: WorkspaceNode?
     @Published private(set) var lastError: String?
     @Published private(set) var lastChange: VFSDidChangeParams?
@@ -110,6 +112,7 @@ final class VFSNetworkEngine: ObservableObject {
         reconnectTask?.cancel()
         reconnectTask = nil
         tearDownSocket(reason: "stopped")
+        clearWorkspaceSnapshot()
         connectionState = .disconnected
     }
 
@@ -119,22 +122,39 @@ final class VFSNetworkEngine: ObservableObject {
     func initialize(root: String? = nil) async throws -> VFSInitializeResult {
         let params = VFSInitializeParams(root: root ?? initializeRoot)
         let result: VFSInitializeResult = try await call(method: "vfs/initialize", params: params)
+        applyInitializeResult(result)
+        log.info(
+            "vfs/initialize root=\(result.root, privacy: .public) name=\(self.workspaceName ?? "—", privacy: .public) remote=\(self.workspaceRemote ?? "—", privacy: .public) branch=\(self.workspaceBranch ?? "—", privacy: .public) entries=\(result.entries.count)"
+        )
+        return result
+    }
+
+    /// Apply initialize payload to published workspace fields (name / remote / branch / tree).
+    private func applyInitializeResult(_ result: VFSInitializeResult) {
         workspaceRoot = result.root
         let trimmed = result.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let displayName: String? = trimmed.isEmpty ? nil : trimmed
-        workspaceName = displayName
+        workspaceName = trimmed.isEmpty ? nil : trimmed
         let remoteTrimmed = result.remote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         workspaceRemote = remoteTrimmed.isEmpty ? nil : remoteTrimmed
+        // Prefer explicit branch; never leave a stale branch from a prior connection.
+        let branchTrimmed = result.branch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        workspaceBranch = branchTrimmed.isEmpty ? nil : branchTrimmed
         let assembled = WorkspaceTreeAssembler.assemble(
             entries: result.entries,
             rootPath: result.root,
-            rootName: displayName
+            rootName: workspaceName
         )
+        // Force a publish even when the tree content is structurally equal (same files).
+        tree = nil
         tree = assembled
-        log.info(
-            "vfs/initialize root=\(result.root, privacy: .public) name=\(displayName ?? "—", privacy: .public) remote=\(self.workspaceRemote ?? "—", privacy: .public) entries=\(result.entries.count)"
-        )
-        return result
+    }
+
+    private func clearWorkspaceSnapshot() {
+        workspaceRoot = nil
+        workspaceName = nil
+        workspaceRemote = nil
+        workspaceBranch = nil
+        tree = nil
     }
 
     func read(path: String) async throws -> VFSReadResult {
@@ -169,12 +189,10 @@ final class VFSNetworkEngine: ObservableObject {
     /// Cached text if present (exact key or slash-normalized match).
     func cachedContent(for path: String) -> String? {
         if let hit = fileBuffers[path] { return hit }
-        let normalized = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalized = VFSPath.normalize(path)
         if let hit = fileBuffers[normalized] { return hit }
-        for (key, value) in fileBuffers {
-            if key.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == normalized {
-                return value
-            }
+        for (key, value) in fileBuffers where VFSPath.matches(key, path) {
+            return value
         }
         return nil
     }
@@ -267,16 +285,17 @@ final class VFSNetworkEngine: ObservableObject {
         startReceiveLoop()
         startHeartbeat()
 
-        // Probe: initialize once the socket is up (send may fail until open — retry via receive path / backoff).
+        // Probe: initialize once the socket is up. Only mark `.connected` after initialize
+        // so clients never apply a stale tree/branch while `isReady` is true.
         Task { @MainActor [weak self] in
             guard let self, self.wantsRunning else { return }
             // Small delay so the handshake can complete.
             try? await Task.sleep(nanoseconds: 150_000_000)
             guard self.webSocket === task else { return }
             do {
+                _ = try await self.initialize()
                 self.connectionState = .connected
                 self.reconnectAttempt = 0
-                _ = try await self.initialize()
             } catch {
                 self.log.error("vfs initialize failed: \(error.localizedDescription, privacy: .public)")
                 self.lastError = error.localizedDescription
@@ -478,6 +497,8 @@ final class VFSNetworkEngine: ObservableObject {
         webSocket?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
         webSocket = nil
         failPending(with: VFSError.closed(reason))
+        // Drop snapshot so reconnect cannot re-apply an old tree with a wrong branch.
+        clearWorkspaceSnapshot()
     }
 
     private func failPending(with error: Error) {

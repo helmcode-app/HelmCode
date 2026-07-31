@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  Files navigator: OutlineGroup tree + context menu.
-//  VFS projects share the same WorkspaceNode model as demo catalog trees.
+//  Runner-backed projects share the WorkspaceNode model for the outline tree.
 //
 
 import SwiftUI

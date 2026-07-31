@@ -144,8 +144,8 @@ extension WorkspaceSession {
     private func updateSourceControl(_ body: (inout SourceControlState) -> Void) {
         guard let projectID = selectedProjectID else { return }
         var state = sourceControl ?? sourceControlByProject[projectID] ?? SourceControlState(
-            branch: selectedProject?.defaultBranch ?? "main",
-            upstream: nil,
+            branch: selectedProject?.displayBranch ?? "—",
+            upstream: selectedProject?.displayUpstream,
             changes: [],
             lastMessage: nil
         )

@@ -65,6 +65,18 @@ struct SourceControlState: Hashable, Sendable {
     var unstaged: [GitChange] { changes.filter { !$0.isStaged }.sorted { $0.path < $1.path } }
     var changeCount: Int { changes.count }
 
+    /// Align SCM header with project metadata (live git branch from VFS).
+    mutating func applyBranch(from project: WorkspaceProject) {
+        branch = project.displayBranch
+        upstream = project.displayUpstream
+    }
+
+    mutating func applyBranchName(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        branch = trimmed.isEmpty ? "—" : trimmed
+        upstream = trimmed.isEmpty ? "—" : "origin/\(trimmed)"
+    }
+
     static func seed(for project: WorkspaceProject) -> SourceControlState {
         // Demo dirty files so SCM isn't empty on first open.
         let candidates = project.root.collectFiles(limit: 8)
@@ -73,8 +85,8 @@ struct SourceControlState: Hashable, Sendable {
             GitChange(path: node.path, kind: .modified, nodeID: node.id, isStaged: false)
         }
         return SourceControlState(
-            branch: project.defaultBranch,
-            upstream: "origin/\(project.defaultBranch)",
+            branch: project.displayBranch,
+            upstream: project.displayUpstream,
             changes: changes,
             lastMessage: nil
         )

@@ -27,14 +27,7 @@ enum WorkspaceTreeError: LocalizedError, Equatable {
 
 extension WorkspaceProject {
     func withRoot(_ root: WorkspaceNode) -> WorkspaceProject {
-        WorkspaceProject(
-            id: id,
-            name: name,
-            remote: remote,
-            defaultBranch: defaultBranch,
-            root: root,
-            runnerBaseURL: runnerBaseURL
-        )
+        with(root: root)
     }
 }
 

@@ -53,6 +53,7 @@ HelmCode/
 | File selected | `EditorCanvasView` | Project switcher + file name |
 
 **Welcome → Open Project:** Hosted (placeholder) | Self-hosted URL (`OpenProjectSheet`).  
+Projects are **only** added via Open Project (no seed mocks). Metadata is cached in `UserDefaults`; trees reload from VFS on open.  
 **Recent:** up to 5 rows; **More…** opens `BrowseProjectsSheet` when there are more.
 
 ### Sidebar
@@ -84,10 +85,12 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Methods | `vfs/initialize`, `vfs/read`, `vfs/write`, `vfs/shutdown` |
 | Notifications | `vfs/didChange` → selective buffer reload / tree refresh (non-blocking receive) |
 | Editor | Autosave + ⌘S write-back; soft hot-reload keeps open file + scroll |
-| Identity | `initialize.name` / `initialize.remote` for project title / subtitle |
+| Identity | `initialize.name` / `remote` / `branch` → project title / subtitle / SCM |
+| Persistence | `SavedProjectRecord` in UserDefaults (metadata only; tree reloaded via VFS) |
+| Bridge | `WorkspaceRuntimeBridge` binds engines ↔ `WorkspaceSession` |
 | URL helpers | `RunnerURL` · `VFSPath` · `VFSConnect` (Open Project self-hosted flow) |
 
-Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`WorkspaceTreeAssembler`) — same tree model as demo catalog projects.
+Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`WorkspaceTreeAssembler`).
 
 ## Backend
 

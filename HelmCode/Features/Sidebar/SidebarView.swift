@@ -137,25 +137,38 @@ struct SidebarView: View {
     private var projectsList: some View {
         List {
             Section {
-                ForEach(session.projects) { project in
-                    Button {
-                        session.openProject(project.id)
-                    } label: {
-                        ProjectListLabel(
-                            project: project,
-                            secondary: .remote,
-                            runnerStatus: runnerStatus.displayStatus(
-                                for: project,
-                                engine: engine,
-                                vfs: vfs
+                if session.projects.isEmpty {
+                    Text("No projects yet. Use Open Project on the welcome page.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(session.projects) { project in
+                        Button {
+                            session.openProject(project.id)
+                        } label: {
+                            ProjectListLabel(
+                                project: project,
+                                secondary: .remote,
+                                runnerStatus: runnerStatus.displayStatus(
+                                    for: project,
+                                    engine: engine,
+                                    vfs: vfs
+                                )
                             )
-                        )
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                session.removeProject(project.id)
+                            } label: {
+                                Label("Remove Project", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             } header: {
                 Text("Projects")
             } footer: {
-                Text("Open a project to browse files, or use the welcome page.")
+                Text("Projects are added via Open Project and kept on this device.")
                     .font(.caption2)
             }
         }

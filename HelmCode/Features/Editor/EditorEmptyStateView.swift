@@ -61,7 +61,7 @@ struct EditorEmptyStateView: View {
                 .font(.subheadline.weight(.medium))
             Text("·")
                 .foregroundStyle(.tertiary)
-            Text(project.defaultBranch)
+            Text(project.displayBranch)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
         }
@@ -117,7 +117,7 @@ struct EditorEmptyStateView: View {
 
 #Preview {
     EditorEmptyStateView(
-        project: WorkspaceCatalog.projects[0],
+        project: WorkspaceCatalog.previewProject,
         onOpenFile: { _ in }
     )
 }

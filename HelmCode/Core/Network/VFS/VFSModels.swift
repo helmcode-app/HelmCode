@@ -58,16 +58,25 @@ struct VFSInitializeResult: Codable, Sendable, Equatable {
     let name: String?
     /// Git origin display string (e.g. `github.com/org/repo`); optional for older servers.
     let remote: String?
+    /// Current HEAD branch from runner; optional for older servers (do not invent `main`).
+    let branch: String?
     let entries: [RawFileNode]
 
     enum CodingKeys: String, CodingKey {
-        case root, name, remote, entries
+        case root, name, remote, branch, entries
     }
 
-    init(root: String, name: String? = nil, remote: String? = nil, entries: [RawFileNode]) {
+    init(
+        root: String,
+        name: String? = nil,
+        remote: String? = nil,
+        branch: String? = nil,
+        entries: [RawFileNode]
+    ) {
         self.root = root
         self.name = name
         self.remote = remote
+        self.branch = branch
         self.entries = entries
     }
 
@@ -76,6 +85,7 @@ struct VFSInitializeResult: Codable, Sendable, Equatable {
         root = try container.decode(String.self, forKey: .root)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         remote = try container.decodeIfPresent(String.self, forKey: .remote)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
         entries = try container.decode([RawFileNode].self, forKey: .entries)
     }
 }

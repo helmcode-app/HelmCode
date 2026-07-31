@@ -8,7 +8,7 @@
 import Foundation
 
 struct WorkspaceProject: Identifiable, Hashable, Sendable {
-    /// Id for the single remote runner-core VFS workspace project.
+    /// Legacy single-slot id (migration only; new projects use `stableID(forRunnerBaseURL:)`).
     static let vfsRemoteID = "vfs-remote"
 
     let id: String
@@ -16,7 +16,7 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
     let remote: String
     let defaultBranch: String
     let root: WorkspaceNode
-    /// Runner-core HTTP base URL for this project (`nil` = local/demo, no remote API).
+    /// Runner-core HTTP base URL for this project (`nil` = no remote API / not a real workspace).
     let runnerBaseURL: String?
 
     init(
@@ -35,9 +35,20 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         self.runnerBaseURL = runnerBaseURL
     }
 
-    /// Remote runner-core VFS project (single active remote workspace today).
+    /// Stable id for a self-hosted runner URL (survives restarts; one project per URL).
+    static func stableID(forRunnerBaseURL raw: String) -> String {
+        let normalized = RunnerURL.normalizeHTTP(raw).lowercased()
+        let data = Data(normalized.utf8)
+        let encoded = data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "r-\(encoded)"
+    }
+
+    /// Remote workspace backed by runner-core VFS (has a runner URL).
     var isVFSRemote: Bool {
-        id == Self.vfsRemoteID
+        normalizedRunnerURL != nil
     }
 
     /// Normalized runner URL for connectivity probes / matching the active engine.
@@ -46,9 +57,34 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         return RunnerURL.normalizeHTTP(raw)
     }
 
-    /// e.g. `main  ·  github.com/…`
+    /// Normalized branch string (empty when unknown / detached).
+    var trimmedBranch: String {
+        defaultBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// UI label for branch (`—` when empty).
+    var displayBranch: String {
+        trimmedBranch.isEmpty ? "—" : trimmedBranch
+    }
+
+    /// UI upstream label (`origin/<branch>` or `—`).
+    var displayUpstream: String {
+        trimmedBranch.isEmpty ? "—" : "origin/\(trimmedBranch)"
+    }
+
+    /// e.g. `main  ·  github.com/…` (omits empty branch).
     var branchRemoteLine: String {
-        "\(defaultBranch)  ·  \(remote)"
+        let branch = trimmedBranch
+        if branch.isEmpty { return remote }
+        if remote.isEmpty { return branch }
+        return "\(branch)  ·  \(remote)"
+    }
+
+    /// Live branch from runner wins; only fall back to cache when server omitted it.
+    static func resolveBranch(live: String?, previous: String?) -> String {
+        let liveTrimmed = live?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !liveTrimmed.isEmpty { return liveTrimmed }
+        return previous?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Prefer git origin for UI; avoid showing container mount paths when possible.
@@ -66,6 +102,23 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
             return previousRemote
         }
         return fallbackRoot
+    }
+
+    func with(
+        name: String? = nil,
+        remote: String? = nil,
+        defaultBranch: String? = nil,
+        root: WorkspaceNode? = nil,
+        runnerBaseURL: String? = nil
+    ) -> WorkspaceProject {
+        WorkspaceProject(
+            id: id,
+            name: name ?? self.name,
+            remote: remote ?? self.remote,
+            defaultBranch: defaultBranch ?? self.defaultBranch,
+            root: root ?? self.root,
+            runnerBaseURL: runnerBaseURL ?? self.runnerBaseURL
+        )
     }
 }
 
