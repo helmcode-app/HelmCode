@@ -23,6 +23,16 @@ npm install \
   @codemirror/lang-json \
   @codemirror/lang-markdown \
   @codemirror/lang-cpp \
+  @codemirror/lang-html \
+  @codemirror/lang-css \
+  @codemirror/lang-python \
+  @codemirror/lang-rust \
+  @codemirror/lang-java \
+  @codemirror/lang-xml \
+  @codemirror/lang-sql \
+  @codemirror/lang-yaml \
+  @codemirror/lang-php \
+  @codemirror/lang-sass \
   @codemirror/language \
   @codemirror/legacy-modes \
   @codemirror/theme-one-dark \

@@ -72,8 +72,24 @@ import { javascript } from "@codemirror/lang-javascript"
 import { json } from "@codemirror/lang-json"
 import { markdown } from "@codemirror/lang-markdown"
 import { cpp } from "@codemirror/lang-cpp"
+import { html } from "@codemirror/lang-html"
+import { css } from "@codemirror/lang-css"
+import { python } from "@codemirror/lang-python"
+import { rust } from "@codemirror/lang-rust"
+import { java } from "@codemirror/lang-java"
+import { xml } from "@codemirror/lang-xml"
+import { sql } from "@codemirror/lang-sql"
+import { yaml } from "@codemirror/lang-yaml"
+import { php } from "@codemirror/lang-php"
+import { sass } from "@codemirror/lang-sass"
 import { swift } from "@codemirror/legacy-modes/mode/swift"
 import { go } from "@codemirror/legacy-modes/mode/go"
+import { shell } from "@codemirror/legacy-modes/mode/shell"
+import { dockerFile } from "@codemirror/legacy-modes/mode/dockerfile"
+import { toml } from "@codemirror/legacy-modes/mode/toml"
+import { ruby } from "@codemirror/legacy-modes/mode/ruby"
+import { lua } from "@codemirror/legacy-modes/mode/lua"
+import { kotlin, csharp } from "@codemirror/legacy-modes/mode/clike"
 
 // MARK: Font size (IDE zoom)
 
@@ -118,20 +134,66 @@ function languageExtension(lang) {
       return StreamLanguage.define(swift)
     case "go":
       return StreamLanguage.define(go)
+    case "gomod":
+      // go.mod / go.sum — shell-like tokens are good enough for readability.
+      return StreamLanguage.define(shell)
     case "ts":
     case "typescript":
       return javascript({ typescript: true })
+    case "tsx":
+      return javascript({ typescript: true, jsx: true })
     case "js":
     case "javascript":
       return javascript()
+    case "jsx":
+      return javascript({ jsx: true })
     case "json":
       return json()
     case "md":
     case "markdown":
       return markdown()
+    case "html":
+      return html()
+    case "css":
+      return css()
+    case "scss":
+      return sass()
     case "cpp":
+      return cpp()
     case "c":
       return cpp()
+    case "py":
+    case "python":
+      return python()
+    case "rs":
+    case "rust":
+      return rust()
+    case "java":
+      return java()
+    case "kotlin":
+      return StreamLanguage.define(kotlin)
+    case "csharp":
+      return StreamLanguage.define(csharp)
+    case "xml":
+      return xml()
+    case "yml":
+    case "yaml":
+      return yaml()
+    case "toml":
+      return StreamLanguage.define(toml)
+    case "sql":
+      return sql()
+    case "sh":
+    case "shell":
+      return StreamLanguage.define(shell)
+    case "docker":
+      return StreamLanguage.define(dockerFile)
+    case "ruby":
+      return StreamLanguage.define(ruby)
+    case "php":
+      return php()
+    case "lua":
+      return StreamLanguage.define(lua)
     default:
       return []
   }

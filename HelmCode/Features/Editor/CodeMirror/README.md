@@ -8,7 +8,7 @@ Swift host + offline web assets (all under this folder).
 | `CodeMirrorWebView.swift` | WKWebView subclass, menus, key commands |
 | `CodeMirrorBundle.swift` | Evaluate JS helpers |
 | `CodeMirrorCommand.swift` | Editor command ids / context menu items |
-| `CodeMirrorLanguage.swift` | Language id mapping |
+| `CodeMirrorLanguage.swift` | Language id mapping (swift/ts/js/html/css/go/py/rs/java/… ) |
 | `index.html` | Shell page + dark active-line CSS |
 | `editor.bundle.js` | Minified CM6 IIFE → `window.HelmCodeEditor` |
 | `editor-entry.mjs` | Source used to rebuild the bundle |

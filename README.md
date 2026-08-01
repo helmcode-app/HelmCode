@@ -65,10 +65,11 @@ Projects are **only** added via Open Project (no seed mocks). Metadata is cached
 | Project open | Top trailing: global **VFS status** + system **sidebarToggle** |
 | Always | Bottom **Settings** via system `safeAreaBar` + soft scroll-edge fade |
 
-- **Files** — outline tree; **VFS remote** tree when `ws://…/v1/vfs` is connected  
+- **Files** — keyboard outline (`SidebarFileTreeModel` / `SidebarFileTreeKeyboard`): ←/→ expand, ↑/↓ move + auto-scroll  
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
+- File type icons: `FileLanguageHint` + `WorkspaceNodeIconStyle` (html/js/css/go/Dockerfile/…)  
 - Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`, `SidebarVFSStatusIcon`)  
 - Per-project API probe: `ProjectRunnerStatusMonitor` (list trailing only; not the top VFS glyph)  
 - Project switching lives in the **center toolbar** (not the sidebar)
@@ -119,6 +120,8 @@ Theme constraints (see `Features/Editor/CodeMirror/README.md`):
 - CM themes: `baseTheme` then `oneDark` only — nothing after `oneDark`
 - Dark caret-row highlight: `data-helm-scheme` + CSS in `index.html`
 - Font size via `Compartment`; shortcuts listed in Settings → About
+- Languages: `FileLanguageHint` → `CodeMirrorLanguage` → `editor-entry.mjs` `languageExtension`
+  (Swift/TS/JS/HTML/CSS/Go/Python/Rust/Java/YAML/SQL/Dockerfile/Shell/…)
 
 ## Build
 
