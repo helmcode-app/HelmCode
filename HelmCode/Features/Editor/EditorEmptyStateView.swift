@@ -55,8 +55,7 @@ struct EditorEmptyStateView: View {
 
     private var projectChip: some View {
         HStack(spacing: 8) {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(Color.accentColor)
+            ProjectAvatarIcon(project: project, size: ProjectAvatarMetrics.chip)
             Text(project.name)
                 .font(.subheadline.weight(.medium))
             Text("·")

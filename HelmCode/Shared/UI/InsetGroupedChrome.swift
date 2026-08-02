@@ -51,17 +51,54 @@ struct IconListRow: View {
     let title: String
     var subtitle: String? = nil
     var subtitleMonospaced: Bool = false
-    let systemImage: String
+    var systemImage: String? = nil
+    /// When set, shows IDEA-style project avatar instead of `systemImage`.
+    var project: WorkspaceProject? = nil
     var isEnabled: Bool = true
     var showsChevron: Bool = true
     var runnerStatus: ProjectRunnerReachability? = nil
 
+    init(
+        title: String,
+        subtitle: String? = nil,
+        subtitleMonospaced: Bool = false,
+        systemImage: String,
+        isEnabled: Bool = true,
+        showsChevron: Bool = true,
+        runnerStatus: ProjectRunnerReachability? = nil
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.subtitleMonospaced = subtitleMonospaced
+        self.systemImage = systemImage
+        self.project = nil
+        self.isEnabled = isEnabled
+        self.showsChevron = showsChevron
+        self.runnerStatus = runnerStatus
+    }
+
+    init(
+        project: WorkspaceProject,
+        subtitle: String? = nil,
+        subtitleMonospaced: Bool = true,
+        isEnabled: Bool = true,
+        showsChevron: Bool = true,
+        runnerStatus: ProjectRunnerReachability? = nil
+    ) {
+        self.title = project.name
+        self.subtitle = subtitle ?? project.branchRemoteLine
+        self.subtitleMonospaced = subtitleMonospaced
+        self.systemImage = nil
+        self.project = project
+        self.isEnabled = isEnabled
+        self.showsChevron = showsChevron
+        self.runnerStatus = runnerStatus
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.body.weight(.medium))
-                .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
-                .frame(width: 28, alignment: .center)
+            leadingGlyph
+                .frame(width: ProjectAvatarMetrics.list, alignment: .center)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -91,9 +128,21 @@ struct IconListRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
     }
+
+    @ViewBuilder
+    private var leadingGlyph: some View {
+        if let project {
+            ProjectAvatarIcon(project: project, size: ProjectAvatarMetrics.list)
+                .opacity(isEnabled ? 1 : 0.45)
+        } else if let systemImage {
+            Image(systemName: systemImage)
+                .font(.body.weight(.medium))
+                .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
+        }
+    }
 }
 
-/// Folder icon + name + secondary line + trailing runner status (sidebar / pickers).
+/// Project avatar + name + secondary line + trailing runner status (sidebar / pickers).
 struct ProjectListLabel: View {
     let project: WorkspaceProject
     var secondary: ProjectSecondary = .remote
@@ -106,17 +155,15 @@ struct ProjectListLabel: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name)
-                    Text(secondaryText)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            } icon: {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(Color.accentColor)
+            ProjectAvatarIcon(project: project, size: ProjectAvatarMetrics.list)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name)
+                    .lineLimit(1)
+                Text(secondaryText)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)

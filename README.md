@@ -74,6 +74,8 @@ Projects are **only** added via Open Project (no seed mocks). Metadata is cached
   · UI: `FileTypeIcon` · tints: `WorkspaceNodeIconStyle`  
   · monochrome logos (Markdown, Rust, …) render as **template** for dark mode  
   · SF Symbols when no brand asset  
+- Project avatars (IDEA-style): `ProjectAvatarStyle` + `ProjectAvatarIcon` / `ProjectAvatarImage`  
+  · initials on glyph only; toolbar Menu uses raster image + full name  
 - Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`, `SidebarVFSStatusIcon`)  
 - Per-project API probe: `ProjectRunnerStatusMonitor` (list trailing only; not the top VFS glyph)  
 - Project switching lives in the **center toolbar** (not the sidebar)

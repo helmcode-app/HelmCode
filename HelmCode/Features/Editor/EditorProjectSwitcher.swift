@@ -2,7 +2,8 @@
 //  EditorProjectSwitcher.swift
 //  HelmCode
 //
-//  Compact project menu for the center-column toolbar (left of the file name).
+//  Center-column toolbar project menu.
+//  Label = raster avatar (icon only) + full project name + chevron — never initials as title.
 //
 
 import SwiftUI
@@ -12,18 +13,7 @@ struct EditorProjectSwitcher: View {
 
     var body: some View {
         Menu {
-            ForEach(session.projects) { project in
-                Button {
-                    session.openProject(project.id)
-                } label: {
-                    if project.id == session.selectedProjectID {
-                        Label(project.name, systemImage: "checkmark")
-                    } else {
-                        Text(project.name)
-                    }
-                }
-            }
-
+            projectPickerItems
             if session.selectedProjectID != nil {
                 Divider()
                 Button("Close Project", role: .destructive) {
@@ -31,18 +21,7 @@ struct EditorProjectSwitcher: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text(currentTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
+            toolbarLabel
         }
         .menuStyle(.borderlessButton)
         .accessibilityLabel("Project")
@@ -50,6 +29,47 @@ struct EditorProjectSwitcher: View {
         .accessibilityHint("Switch or close the open project")
     }
 
+    // MARK: - Menu content
+
+    @ViewBuilder
+    private var projectPickerItems: some View {
+        ForEach(session.projects) { project in
+            Button {
+                session.openProject(project.id)
+            } label: {
+                if project.id == session.selectedProjectID {
+                    Label(project.name, systemImage: "checkmark")
+                } else {
+                    Text(project.name)
+                }
+            }
+        }
+    }
+
+    // MARK: - Toolbar label (Image + Text only)
+
+    private var toolbarLabel: some View {
+        HStack(spacing: 6) {
+            if let project = session.selectedProject {
+                ProjectAvatarImage(project: project, size: ProjectAvatarMetrics.toolbar)
+            } else {
+                Image(systemName: "folder.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            Text(currentTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// Full project name — initials belong only on the avatar image.
     private var currentTitle: String {
         session.selectedProject?.name ?? "Project"
     }

@@ -192,10 +192,7 @@ struct EditorWelcomeView: View {
             session.openProject(project.id)
         } label: {
             IconListRow(
-                title: project.name,
-                subtitle: project.branchRemoteLine,
-                subtitleMonospaced: true,
-                systemImage: "folder.fill",
+                project: project,
                 runnerStatus: runnerStatus.displayStatus(
                     for: project,
                     engine: engine,
