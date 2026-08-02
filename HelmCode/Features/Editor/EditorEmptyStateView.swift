@@ -3,54 +3,60 @@
 //  HelmCode
 //
 //  Center column when a project is open but no file is selected.
+//  Quick Open uses the same FileTypeIcon pipeline as the sidebar.
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct EditorEmptyStateView: View {
     let project: WorkspaceProject
     var onOpenFile: (WorkspaceNode.ID) -> Void
 
+    private enum Metrics {
+        static let quickOpenLimit = 6
+        static let contentMaxWidth: CGFloat = 480
+        static let chipCorner: CGFloat = 10
+    }
+
     private var suggestedFiles: [WorkspaceNode] {
-        project.root.collectFiles(limit: 6)
+        project.root.collectFiles(limit: Metrics.quickOpenLimit)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
-
-            VStack(spacing: 20) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(.tertiary)
-                    .symbolRenderingMode(.hierarchical)
-
-                VStack(spacing: 8) {
-                    Text("No File Open")
-                        .font(.title2.weight(.semibold))
-                    Text("Select a file in the sidebar to start editing.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                projectChip
-            }
-            .padding(.horizontal, 32)
-
+            hero
             if !suggestedFiles.isEmpty {
                 quickOpenSection
             }
-
             Spacer(minLength: 40)
-
             tipsBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+    }
+
+    // MARK: - Hero
+
+    private var hero: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(.tertiary)
+                .symbolRenderingMode(.hierarchical)
+
+            VStack(spacing: 8) {
+                Text("No File Open")
+                    .font(.title2.weight(.semibold))
+                Text("Select a file in the sidebar to start editing.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            projectChip
+        }
+        .padding(.horizontal, 32)
     }
 
     private var projectChip: some View {
@@ -69,6 +75,8 @@ struct EditorEmptyStateView: View {
         .background(Color(.secondarySystemBackground), in: Capsule())
     }
 
+    // MARK: - Quick Open
+
     private var quickOpenSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionCaption(title: "Quick Open")
@@ -79,28 +87,35 @@ struct EditorEmptyStateView: View {
                 spacing: 10
             ) {
                 ForEach(suggestedFiles) { file in
-                    Button {
-                        onOpenFile(file.id)
-                    } label: {
-                        Label(file.name, systemImage: file.systemImage)
-                            .font(.subheadline)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(
-                                Color(.secondarySystemBackground),
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    quickOpenButton(file)
                 }
             }
         }
-        .frame(maxWidth: 480)
+        .frame(maxWidth: Metrics.contentMaxWidth)
         .padding(.top, 36)
         .padding(.horizontal, 32)
     }
+
+    private func quickOpenButton(_ file: WorkspaceNode) -> some View {
+        Button {
+            onOpenFile(file.id)
+        } label: {
+            WorkspaceFileNameLabel(
+                node: file,
+                iconSize: FileTypeIconMetrics.compact
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                Color(.secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: Metrics.chipCorner, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(file.name)")
+    }
+
+    // MARK: - Tips
 
     private var tipsBar: some View {
         HStack(spacing: 16) {

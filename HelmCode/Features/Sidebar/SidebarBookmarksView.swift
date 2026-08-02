@@ -26,9 +26,8 @@ struct SidebarBookmarksView: View {
                             bookmarkLabel(item.bookmark, node: item.node)
                         } icon: {
                             FileTypeIcon(
-                                languageHint: item.node.languageHint,
-                                isDirectory: item.node.isDirectory,
-                                size: 18
+                                node: item.node,
+                                size: FileTypeIconMetrics.list
                             )
                         }
                     }

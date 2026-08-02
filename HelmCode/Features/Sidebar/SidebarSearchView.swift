@@ -119,7 +119,7 @@ struct SidebarSearchView: View {
 
     private func fileHeader(_ group: ProjectSearchFileGroup) -> some View {
         HStack(spacing: 6) {
-            FileTypeIcon(languageHint: group.languageHint, size: 16)
+            FileTypeIcon(languageHint: group.languageHint, size: FileTypeIconMetrics.compact)
             Text(group.fileName)
                 .font(.subheadline.weight(.semibold))
             Text("\(group.matches.count)")

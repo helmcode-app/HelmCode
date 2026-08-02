@@ -2,17 +2,47 @@
 //  FileTypeIcon.swift
 //  HelmCode
 //
-//  Sidebar file/folder glyph: Devicon brand asset or SF Symbol fallback.
-//  Monochrome brand art uses template + language tint (readable in dark mode).
+//  Shared file/folder glyph (sidebar tree, Quick Open, bookmarks, search).
+//  Devicon brand asset or SF Symbol fallback; monochrome brands use template tint.
 //
 
 import SwiftUI
+
+enum FileTypeIconMetrics {
+    static let tree: CGFloat = 18
+    static let list: CGFloat = 18
+    static let compact: CGFloat = 16
+}
 
 struct FileTypeIcon: View {
     let languageHint: String?
     var isDirectory: Bool = false
     var isSelected: Bool = false
-    var size: CGFloat = 18
+    var size: CGFloat = FileTypeIconMetrics.list
+
+    init(
+        languageHint: String?,
+        isDirectory: Bool = false,
+        isSelected: Bool = false,
+        size: CGFloat = FileTypeIconMetrics.list
+    ) {
+        self.languageHint = languageHint
+        self.isDirectory = isDirectory
+        self.isSelected = isSelected
+        self.size = size
+    }
+
+    /// Same glyph rules as the Files sidebar for a tree node.
+    init(
+        node: WorkspaceNode,
+        isSelected: Bool = false,
+        size: CGFloat = FileTypeIconMetrics.list
+    ) {
+        self.languageHint = node.languageHint
+        self.isDirectory = node.isDirectory
+        self.isSelected = isSelected
+        self.size = size
+    }
 
     var body: some View {
         if isDirectory {
@@ -66,6 +96,26 @@ struct FileTypeIcon: View {
                 .scaledToFit()
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
+        }
+    }
+}
+
+// MARK: - Name + type icon row
+
+/// Leading `FileTypeIcon` + file/folder name (Quick Open, compact lists).
+struct WorkspaceFileNameLabel: View {
+    let node: WorkspaceNode
+    var iconSize: CGFloat = FileTypeIconMetrics.compact
+    var isSelected: Bool = false
+    var nameFont: Font = .subheadline
+
+    var body: some View {
+        HStack(spacing: 8) {
+            FileTypeIcon(node: node, isSelected: isSelected, size: iconSize)
+            Text(node.name)
+                .font(nameFont)
+                .lineLimit(1)
+            Spacer(minLength: 0)
         }
     }
 }

@@ -43,10 +43,9 @@ struct SidebarTreeRow: View {
             }
 
             FileTypeIcon(
-                languageHint: node.languageHint,
-                isDirectory: node.isDirectory,
+                node: node,
                 isSelected: isSelected,
-                size: 18
+                size: FileTypeIconMetrics.tree
             )
             .frame(width: 22, alignment: .center)
 
