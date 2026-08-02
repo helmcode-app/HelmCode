@@ -41,6 +41,11 @@ enum CodeMirrorBundle {
         "\(jsGlobal) && \(jsGlobal).replaceDocumentText && \(jsGlobal).replaceDocumentText(\(jsonStringLiteral), { preserveTopLine: true });"
     }
 
+    /// Append a chunk at end of doc (chunked VFS streaming).
+    static func appendDocumentTextJavaScript(jsonStringLiteral: String) -> String {
+        "\(jsGlobal) && \(jsGlobal).appendDocumentText && \(jsGlobal).appendDocumentText(\(jsonStringLiteral));"
+    }
+
     static var relayoutJavaScript: String {
         "\(jsGlobal) && \(jsGlobal).relayout && \(jsGlobal).relayout();"
     }

@@ -21,6 +21,15 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var revealGeneration: Int = 0
     /// When true, text-only updates use soft replace (hot reload) instead of setDocument.
     var preferSoftTextReplace: Bool = false
+    /// When true, Swift drives progressive loads (skip auto setDocument from `text`).
+    var streamMode: Bool = false
+    /// Bump to clear CM and start a new stream (`setDocument("")`).
+    var streamBeginGeneration: UInt64 = 0
+    /// Bump with `streamChunkText` to append a chunk into CM.
+    var streamChunkGeneration: UInt64 = 0
+    var streamChunkText: String = ""
+    /// Bump when stream completes so CM can re-sync bookmarks/layout against final `text`.
+    var streamEndGeneration: UInt64 = 0
     var onToggleBookmark: ((Int, String) -> Void)?
     /// User edits from CodeMirror (do not push `setDocument` back for these).
     var onTextChange: ((String) -> Void)?
@@ -66,6 +75,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
         private var lastMetaKey: String?
         private var lastBookmarkKey: String?
         private var lastRevealedLineToken: String?
+        private var lastStreamBegin: UInt64 = 0
+        private var lastStreamChunk: UInt64 = 0
+        private var lastStreamEnd: UInt64 = 0
+        /// Stream commands that arrived before the WKWebView JS bridge was ready.
+        private var pendingStreamBegin = false
+        private var pendingStreamChunks: [String] = []
+        private var pendingStreamEndText: String?
 
         init(parent: CodeMirrorHostView) {
             self.parent = parent
@@ -88,12 +104,63 @@ struct CodeMirrorHostView: UIViewRepresentable {
         }
 
         func syncToWebView() {
+            applyStreamCommandsIfNeeded()
             let didSoftReplace = pushDocumentIfNeeded()
             pushBookmarksIfNeeded()
             revealLineIfNeeded()
             // Relayout after full setDocument only — soft hot-reload avoids the flash.
             if !didSoftReplace {
                 requestRelayout()
+            }
+        }
+
+        private func applyStreamCommandsIfNeeded() {
+            if parent.streamBeginGeneration != lastStreamBegin {
+                lastStreamBegin = parent.streamBeginGeneration
+                pendingStreamChunks.removeAll(keepingCapacity: true)
+                pendingStreamEndText = nil
+                if isReady {
+                    beginStreamDocument()
+                } else {
+                    pendingStreamBegin = true
+                }
+            }
+            if parent.streamChunkGeneration != lastStreamChunk {
+                lastStreamChunk = parent.streamChunkGeneration
+                let chunk = parent.streamChunkText
+                if isReady {
+                    // Ensure shell exists even if begin was skipped/raced.
+                    if pendingStreamBegin {
+                        beginStreamDocument()
+                        pendingStreamBegin = false
+                    }
+                    appendStreamChunk(chunk)
+                } else if !chunk.isEmpty {
+                    pendingStreamChunks.append(chunk)
+                }
+            }
+            if parent.streamEndGeneration != lastStreamEnd {
+                lastStreamEnd = parent.streamEndGeneration
+                let finalText = parent.text
+                if isReady {
+                    flushPendingStream()
+                    endStreamDocument(finalText: finalText)
+                } else {
+                    pendingStreamEndText = finalText
+                }
+            }
+        }
+
+        private func flushPendingStream() {
+            if pendingStreamBegin {
+                beginStreamDocument()
+                pendingStreamBegin = false
+            }
+            if !pendingStreamChunks.isEmpty {
+                for chunk in pendingStreamChunks {
+                    appendStreamChunk(chunk)
+                }
+                pendingStreamChunks.removeAll(keepingCapacity: false)
             }
         }
 
@@ -129,6 +196,8 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 let text = body["text"] as? String ?? ""
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
+                    // Ignore CM echo while VFS is streaming chunks into the host buffer.
+                    guard !self.parent.streamMode else { return }
                     // Mark payload as already matching so updateUIView won't re-setDocument.
                     self.lastPayloadKey = self.documentKey(forText: text)
                     self.parent.onTextChange?(text)
@@ -137,6 +206,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 let text = body["text"] as? String ?? ""
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
+                    guard !self.parent.streamMode else { return }
                     self.lastPayloadKey = self.documentKey(forText: text)
                     self.parent.onTextChange?(text)
                     self.parent.onSave?(text)
@@ -162,13 +232,79 @@ struct CodeMirrorHostView: UIViewRepresentable {
             lastMetaKey = nil
             lastBookmarkKey = nil
             lastRevealedLineToken = nil
+            // Drain stream queue before normal sync so final setDocument wins if already ended.
+            flushPendingStream()
+            if let end = pendingStreamEndText {
+                pendingStreamEndText = nil
+                endStreamDocument(finalText: end)
+            }
             syncToWebView()
+        }
+
+        /// Begin a streamed document (empty shell); subsequent chunks use `appendStreamChunk`.
+        func beginStreamDocument() {
+            guard isReady else {
+                pendingStreamBegin = true
+                return
+            }
+            let payload: [String: Any] = [
+                "text": "",
+                "language": parent.language.rawValue,
+                "dark": parent.isDark,
+                "readOnly": !parent.isEditable,
+                "bookmarks": [] as [Int],
+            ]
+            guard let json = Self.jsonEncode(payload) else { return }
+            lastPayloadKey = documentKey(forText: "")
+            lastMetaKey = metaKey
+            lastBookmarkKey = nil
+            evaluate(CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json))
+        }
+
+        /// Append one VFS chunk into the live CodeMirror document.
+        func appendStreamChunk(_ text: String) {
+            guard !text.isEmpty else { return }
+            guard isReady else {
+                pendingStreamChunks.append(text)
+                return
+            }
+            guard let textJSON = Self.jsonEncode(text) else { return }
+            evaluate(CodeMirrorBundle.appendDocumentTextJavaScript(jsonStringLiteral: textJSON))
+        }
+
+        /// Finalize stream with a full setDocument — authoritative content (append may have been partial).
+        func endStreamDocument(finalText: String) {
+            guard isReady else {
+                pendingStreamEndText = finalText
+                return
+            }
+            let payload: [String: Any] = [
+                "text": finalText,
+                "language": parent.language.rawValue,
+                "dark": parent.isDark,
+                "readOnly": !parent.isEditable,
+                "bookmarks": parent.bookmarkLines,
+            ]
+            guard let json = Self.jsonEncode(payload) else { return }
+            lastPayloadKey = documentKey(forText: finalText)
+            lastMetaKey = metaKey
+            lastBookmarkKey = nil
+            pendingStreamBegin = false
+            pendingStreamChunks.removeAll(keepingCapacity: false)
+            pendingStreamEndText = nil
+            evaluate(CodeMirrorBundle.setDocumentJavaScript(jsonObjectLiteral: json)) { [weak self] in
+                self?.lastBookmarkKey = self?.bookmarkKey
+                self?.revealLineIfNeeded()
+                self?.requestRelayout()
+            }
         }
 
         /// Returns `true` when a soft (hot-reload) replace was applied.
         @discardableResult
         private func pushDocumentIfNeeded() -> Bool {
             guard isReady else { return false }
+            // During chunked load, host drives setDocument/append via stream APIs.
+            if parent.streamMode { return false }
 
             let key = documentKey
             guard key != lastPayloadKey else { return false }

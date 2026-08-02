@@ -42,10 +42,13 @@ struct SidebarTreeRow: View {
                     .frame(width: Metrics.chevronWidth, height: 20)
             }
 
-            Image(systemName: node.sidebarSystemImage)
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(WorkspaceNodeIconStyle.color(for: node, isSelected: isSelected))
-                .frame(width: 20, alignment: .center)
+            FileTypeIcon(
+                languageHint: node.languageHint,
+                isDirectory: node.isDirectory,
+                isSelected: isSelected,
+                size: 18
+            )
+            .frame(width: 22, alignment: .center)
 
             Text(node.name)
                 .lineLimit(1)

@@ -90,6 +90,84 @@ struct VFSInitializeResult: Codable, Sendable, Equatable {
     }
 }
 
+// MARK: - Chunked read (`vfs/read_chunk`)
+
+struct VFSReadChunkParams: Encodable, Sendable {
+    let path: String
+    let offset: Int64
+    let limit: Int
+}
+
+struct VFSReadChunkResult: Decodable, Sendable, Equatable {
+    let path: String
+    let content: String
+    let offset: Int64
+    let bytesRead: Int
+    let isEOF: Bool
+    let fileSize: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case content
+        case offset
+        case bytesRead = "bytes_read"
+        case isEOF = "is_eof"
+        case fileSize = "file_size"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        path = try c.decode(String.self, forKey: .path)
+        content = try c.decode(String.self, forKey: .content)
+        offset = Self.decodeInt64(c, key: .offset) ?? 0
+        if let n = try? c.decode(Int.self, forKey: .bytesRead) {
+            bytesRead = n
+        } else if let n = try? c.decode(Int64.self, forKey: .bytesRead) {
+            bytesRead = Int(n)
+        } else {
+            bytesRead = content.utf8.count
+        }
+        isEOF = try c.decodeIfPresent(Bool.self, forKey: .isEOF) ?? false
+        fileSize = Self.decodeInt64(c, key: .fileSize) ?? 0
+    }
+
+    private static func decodeInt64(
+        _ c: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Int64? {
+        if let v = try? c.decode(Int64.self, forKey: key) { return v }
+        if let v = try? c.decode(Int.self, forKey: key) { return Int64(v) }
+        return nil
+    }
+}
+
+enum VFSStreamPhase: Equatable, Sendable {
+    case idle
+    case streaming(path: String, loaded: Int64, total: Int64)
+    case complete(path: String)
+    case failed(path: String, message: String)
+}
+
+struct VFSStreamProgress: Equatable, Sendable {
+    var path: String
+    var loadedBytes: Int64
+    var totalBytes: Int64
+    var isLargeFile: Bool
+    var isComplete: Bool
+    var isReadOnlyRecommended: Bool
+
+    var fraction: Double {
+        guard totalBytes > 0 else { return isComplete ? 1 : 0 }
+        return min(1, Double(loadedBytes) / Double(totalBytes))
+    }
+}
+
+/// Chunk size defaults (64 KiB matches runner-core DefaultChunkLimit).
+enum VFSStreamDefaults: Sendable {
+    nonisolated static let chunkLimit = 65_536
+    nonisolated static let largeFileThreshold: Int64 = 2 * 1024 * 1024
+}
+
 // MARK: - Read / write
 
 struct VFSPathParams: Encodable, Sendable {
@@ -100,6 +178,12 @@ struct VFSReadResult: Codable, Sendable, Equatable {
     let path: String
     let content: String
     let size: Int
+
+    init(path: String, content: String, size: Int) {
+        self.path = path
+        self.content = content
+        self.size = size
+    }
 }
 
 struct VFSWriteParams: Encodable, Sendable {

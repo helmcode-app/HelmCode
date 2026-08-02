@@ -23,12 +23,14 @@ enum WorkspaceTreeAssembler {
             let name: String
             let path: String
             let isDirectory: Bool
+            var size: Int64
             var children: [String: Builder] = [:]
 
-            init(name: String, path: String, isDirectory: Bool) {
+            init(name: String, path: String, isDirectory: Bool, size: Int64 = 0) {
                 self.name = name
                 self.path = path
                 self.isDirectory = isDirectory
+                self.size = size
             }
 
             func toNode() -> WorkspaceNode {
@@ -44,7 +46,8 @@ enum WorkspaceTreeAssembler {
                     path: path,
                     isDirectory: isDirectory,
                     children: sorted.map { $0.toNode() },
-                    languageHint: isDirectory ? nil : FileLanguageHint.resolve(fileName: name)
+                    languageHint: isDirectory ? nil : FileLanguageHint.resolve(fileName: name),
+                    size: isDirectory ? 0 : size
                 )
             }
         }
@@ -70,12 +73,20 @@ enum WorkspaceTreeAssembler {
                 cumulative = cumulative.isEmpty ? part : "\(cumulative)/\(part)"
 
                 if let existing = parent.children[part] {
+                    if isLast, !entry.isDirectory {
+                        existing.size = entry.size
+                    }
                     parent = existing
                     continue
                 }
 
                 let isDir = isLast ? entry.isDirectory : true
-                let node = Builder(name: part, path: cumulative, isDirectory: isDir)
+                let node = Builder(
+                    name: part,
+                    path: cumulative,
+                    isDirectory: isDir,
+                    size: isLast && !entry.isDirectory ? entry.size : 0
+                )
                 parent.children[part] = node
                 parent = node
             }

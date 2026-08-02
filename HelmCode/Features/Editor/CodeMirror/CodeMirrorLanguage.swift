@@ -51,21 +51,25 @@ enum CodeMirrorLanguage: String, Sendable, CaseIterable {
             return
         }
         switch hint {
-        case "html", "vue", "svelte": self = .html
+        case "html", "vue", "svelte", "astro", "angular", "react", "nextjs": self = .html
         case "css", "less": self = .css
-        case "java", "scala": self = .java
+        case "java", "scala", "spring": self = .java
         case "csharp", "fsharp": self = .csharp
         case "cpp", "cuda", "objc", "metal": self = .cpp
         case "xml", "svg", "plist", "proto": self = .xml
         case "yml", "yaml": self = .yaml
-        case "toml", "ini", "env", "hcl", "ignore", "lock", "procfile": self = .toml
+        case "toml", "ini", "env", "hcl", "ignore", "lock", "procfile", "terraform", "ansible":
+            self = .toml
         case "sh", "powershell", "batch", "makefile", "cmake": self = .shell
         case "ruby", "elixir", "perl": self = .ruby
         case "md", "markdown": self = .markdown
-        case "py", "python": self = .python
+        case "py", "python", "django", "flask", "fastapi": self = .python
         case "rs", "rust": self = .rust
         case "ts", "typescript": self = .typescript
-        case "js", "javascript": self = .javascript
+        case "js", "javascript", "nodejs", "npm", "webpack", "vite", "bun": self = .javascript
+        case "sql", "sqlite", "postgresql", "mysql": self = .sql
+        case "git": self = .plain
+        case "wasm", "solidity", "julia", "matlab": self = .plain
         default: self = .plain
         }
     }

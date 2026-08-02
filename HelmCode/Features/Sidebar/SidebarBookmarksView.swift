@@ -25,9 +25,11 @@ struct SidebarBookmarksView: View {
                         Label {
                             bookmarkLabel(item.bookmark, node: item.node)
                         } icon: {
-                            Image(systemName: item.node.sidebarSystemImage)
-                                .symbolRenderingMode(.monochrome)
-                                .foregroundStyle(WorkspaceNodeIconStyle.color(for: item.node))
+                            FileTypeIcon(
+                                languageHint: item.node.languageHint,
+                                isDirectory: item.node.isDirectory,
+                                size: 18
+                            )
                         }
                     }
                     .contextMenu {

@@ -69,7 +69,11 @@ Projects are **only** added via Open Project (no seed mocks). Metadata is cached
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
 - **Source Control** — local mock (stage / commit / pull·push·fetch)  
-- File type icons: `FileLanguageHint` + `WorkspaceNodeIconStyle` (html/js/css/go/Dockerfile/…)  
+- File type icons: Devicon **1x/2x/3x PNG** in `Assets.xcassets/FileTypeIcons/`  
+  · resolve: `FileLanguageHint` (+ BrandAssets / ResolveTables)  
+  · UI: `FileTypeIcon` · tints: `WorkspaceNodeIconStyle`  
+  · monochrome logos (Markdown, Rust, …) render as **template** for dark mode  
+  · SF Symbols when no brand asset  
 - Shared chrome: `SidebarChrome` (`helmSidebarListStyle`, `SidebarSettingsBar`, `SidebarVFSStatusIcon`)  
 - Per-project API probe: `ProjectRunnerStatusMonitor` (list trailing only; not the top VFS glyph)  
 - Project switching lives in the **center toolbar** (not the sidebar)
@@ -83,7 +87,8 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Endpoint | `ws(s)://<host>/v1/vfs` (from Backend base URL) |
 | Auth | Same Bearer token as open-core when configured |
 | Client | `VFSNetworkEngine` — heartbeat, auto-reconnect, request/response map |
-| Methods | `vfs/initialize`, `vfs/read`, `vfs/write`, `vfs/shutdown` |
+| Methods | `vfs/initialize`, `vfs/read`, `vfs/read_chunk`, `vfs/write`, `vfs/shutdown` |
+| Stream | `VFSStreamEngine` progressive open for large files |
 | Notifications | `vfs/didChange` → selective buffer reload / tree refresh (non-blocking receive) |
 | Editor | Autosave + ⌘S write-back; soft hot-reload keeps open file + scroll |
 | Identity | `initialize.name` / `remote` / `branch` → project title / subtitle / SCM |

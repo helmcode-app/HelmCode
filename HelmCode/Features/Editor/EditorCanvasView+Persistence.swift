@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  Load / save / poll / remote-cache for the center-column editor.
+//  Large VFS files use chunked vfs/read_chunk via VFSStreamEngine.
 //
 
 import Foundation
@@ -11,6 +12,8 @@ extension EditorCanvasView {
     // MARK: - Edit / save
 
     func handleTextChange(_ text: String) {
+        // Streaming uses host buffer; CM must not overwrite it with "" echoes.
+        guard !streamMode, !isReadOnlyStream else { return }
         buffer = text
         saveError = nil
         guard usesVFS else { return }
@@ -18,6 +21,7 @@ extension EditorCanvasView {
     }
 
     func scheduleAutosave() {
+        guard !isReadOnlyStream else { return }
         autosaveTask?.cancel()
         autosaveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -28,7 +32,7 @@ extension EditorCanvasView {
 
     @MainActor
     func saveNow(content: String) async {
-        guard usesVFS else { return }
+        guard usesVFS, !isReadOnlyStream else { return }
         guard content != savedSnapshot else { return }
         let path = file.path
         guard !path.isEmpty else { return }
@@ -37,7 +41,7 @@ extension EditorCanvasView {
 
     @MainActor
     func persist(path: String, content: String) async {
-        guard usesVFS else { return }
+        guard usesVFS, !isReadOnlyStream else { return }
         isSaving = true
         saveError = nil
         defer { isSaving = false }
@@ -57,33 +61,32 @@ extension EditorCanvasView {
     @MainActor
     func switchToCurrentFile() async {
         autosaveTask?.cancel()
-        // Flush previous dirty buffer before rebinding.
-        if usesVFS, !boundPath.isEmpty, boundPath != file.path, buffer != savedSnapshot {
+        streamEngine.cancel()
+        if usesVFS, !isReadOnlyStream, !boundPath.isEmpty, boundPath != file.path, buffer != savedSnapshot {
             await persist(path: boundPath, content: buffer)
         }
         boundPath = file.path
+        isReadOnlyStream = file.size > VFSStreamDefaults.largeFileThreshold
         await reloadBuffer(markSaved: true)
         takePendingReveal()
     }
 
-    /// Apply remote cache only when local buffer is clean (avoid clobbering edits).
     func applyRemoteCacheIfClean() {
-        guard usesVFS, !isDirty else { return }
+        guard usesVFS, !isDirty, !isReadOnlyStream else { return }
         guard let cached = vfs.cachedContent(for: file.path), cached != buffer else { return }
         buffer = cached
         savedSnapshot = cached
         loadError = nil
     }
 
-    /// Background re-fetch without the full loading overlay.
     @MainActor
     func pollRemoteFile() async {
-        guard usesVFS, !file.isDirectory, !isDirty, !isSaving else { return }
+        guard usesVFS, !file.isDirectory, !isDirty, !isSaving, !isReadOnlyStream else { return }
         do {
-            let result = try await vfs.read(path: file.path)
-            if result.content != buffer {
-                buffer = result.content
-                savedSnapshot = result.content
+            let text = try await vfs.readStreaming(path: file.path, expectedSize: file.size)
+            if text != buffer {
+                buffer = text
+                savedSnapshot = text
                 loadError = nil
             }
         } catch {
@@ -98,27 +101,14 @@ extension EditorCanvasView {
         guard !file.isDirectory else {
             buffer = ""
             savedSnapshot = ""
+            streamMode = false
+            isLoading = false
+            streamProgress = nil
             return
         }
 
         if usesVFS {
-            if let cached = vfs.cachedContent(for: file.path) {
-                buffer = cached
-                if markSaved { savedSnapshot = cached }
-                loadError = nil
-            }
-            isLoading = buffer.isEmpty
-            do {
-                let result = try await vfs.read(path: file.path)
-                buffer = result.content
-                if markSaved { savedSnapshot = result.content }
-                loadError = nil
-            } catch {
-                if buffer.isEmpty {
-                    loadError = error.localizedDescription
-                }
-            }
-            isLoading = false
+            await streamReloadFromVFS(markSaved: markSaved)
             return
         }
 
@@ -126,6 +116,98 @@ extension EditorCanvasView {
         if markSaved { savedSnapshot = buffer }
         loadError = nil
         isSaving = false
+        isLoading = false
+        streamMode = false
+        streamProgress = nil
+    }
+
+    /// Chunked open: vfs/read_chunk loop + progressive CodeMirror injection.
+    @MainActor
+    private func streamReloadFromVFS(markSaved: Bool) async {
+        loadError = nil
+        streamEngine.cancel()
+        streamProgress = nil
+
+        // Stream always rebuilds from server; optional cache is paint-only until first chunk.
+        let warm = vfs.cachedContent(for: file.path) ?? ""
+        buffer = warm
+        if markSaved { savedSnapshot = warm }
+
+        isLoading = true
+        streamMode = true
+        isReadOnlyStream = file.size > VFSStreamDefaults.largeFileThreshold
+        streamBeginGeneration &+= 1
+
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            var finished = false
+            var startedFresh = false
+            let done: () -> Void = {
+                guard !finished else { return }
+                finished = true
+                cont.resume()
+            }
+
+            streamEngine.streamFile(
+                path: file.path,
+                expectedSize: file.size,
+                vfs: vfs,
+                onChunk: { chunk, isFirst, prog in
+                    if isFirst {
+                        // Replace any warm cache; first chunk owns the buffer.
+                        buffer = chunk
+                        startedFresh = true
+                    } else if !chunk.isEmpty {
+                        buffer.append(chunk)
+                    }
+                    if !chunk.isEmpty || isFirst {
+                        streamChunkText = chunk
+                        streamChunkGeneration &+= 1
+                    }
+                    streamProgress = prog
+                    isReadOnlyStream = prog.isReadOnlyRecommended
+                    if prog.loadedBytes > 0 || startedFresh {
+                        isLoading = false
+                    }
+                },
+                onComplete: { full, prog in
+                    // Set buffer before end generation so CM endStreamDocument sees full text.
+                    buffer = full
+                    if markSaved { savedSnapshot = full }
+                    streamProgress = prog
+                    isReadOnlyStream = prog.isReadOnlyRecommended
+                    streamEndGeneration &+= 1
+                    // Keep streamMode true until after end is applied in the next frame,
+                    // so documentChange echoes from setDocument("") still ignore.
+                    isLoading = false
+                    loadError = nil
+                    vfs.cacheContent(full, for: file.path)
+                    Task { @MainActor in
+                        // Allow WK evaluate of final setDocument to land, then leave stream mode.
+                        try? await Task.sleep(nanoseconds: 50_000_000)
+                        streamMode = false
+                        done()
+                    }
+                }
+            )
+
+            Task { @MainActor in
+                while !finished {
+                    try? await Task.sleep(nanoseconds: 40_000_000)
+                    if case .failed(_, let msg) = streamEngine.phase {
+                        loadError = msg
+                        isLoading = false
+                        streamMode = false
+                        done()
+                        return
+                    }
+                    if case .complete = streamEngine.phase {
+                        done()
+                        return
+                    }
+                }
+            }
+        }
+
         isLoading = false
     }
 

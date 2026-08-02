@@ -1032,6 +1032,21 @@ function boot() {
         applyBookmarkLines(view, lastBookmarkLines)
       }
     },
+    /**
+     * Append text at end of document (chunked VFS stream load).
+     * Does not rebuild state; call setDocument first with "" for a new stream.
+     */
+    appendDocumentText(text) {
+      if (!view) return
+      const t = typeof text === "string" ? text : ""
+      if (!t) return
+      const len = view.state.doc.length
+      view.dispatch({
+        changes: { from: len, to: len, insert: t },
+        // Avoid scroll jump while streaming.
+        userEvent: "input.paste",
+      })
+    },
     firstVisibleLine() {
       return view ? firstVisibleLineNumber(view) : 1
     },

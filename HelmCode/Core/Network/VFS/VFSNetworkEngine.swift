@@ -157,16 +157,28 @@ final class VFSNetworkEngine: ObservableObject {
         tree = nil
     }
 
+    /// Prefer `readStreaming` / `VFSStreamEngine` for unknown or large sizes.
+    /// Falls back to chunked assembly when the server rejects full `vfs/read`.
     func read(path: String) async throws -> VFSReadResult {
-        let result: VFSReadResult = try await call(
-            method: "vfs/read",
-            params: VFSPathParams(path: path)
-        )
-        // Index under both client path and server path (may differ by slash/normalization).
-        fileBuffers[path] = result.content
-        fileBuffers[result.path] = result.content
-        bufferRevision &+= 1
-        return result
+        do {
+            let result: VFSReadResult = try await call(
+                method: "vfs/read",
+                params: VFSPathParams(path: path)
+            )
+            fileBuffers[path] = result.content
+            fileBuffers[result.path] = result.content
+            bufferRevision &+= 1
+            return result
+        } catch let error as VFSError {
+            // Server: file too large for vfs/read → stream chunks.
+            if case .rpc(_, let message) = error,
+               message.localizedCaseInsensitiveContains("read_chunk")
+                || message.localizedCaseInsensitiveContains("too large") {
+                let text = try await readStreaming(path: path)
+                return VFSReadResult(path: path, content: text, size: text.utf8.count)
+            }
+            throw error
+        }
     }
 
     @discardableResult
@@ -195,6 +207,16 @@ final class VFSNetworkEngine: ObservableObject {
             return value
         }
         return nil
+    }
+
+    /// Publish assembled stream content into the buffer map (no network I/O).
+    func cacheContent(_ content: String, for path: String) {
+        fileBuffers[path] = content
+        let normalized = VFSPath.normalize(path)
+        if normalized != path {
+            fileBuffers[normalized] = content
+        }
+        bufferRevision &+= 1
     }
 
     // MARK: - JSON-RPC
@@ -412,7 +434,7 @@ final class VFSNetworkEngine: ObservableObject {
         case .write:
             // Always re-read when notified (host/container edits should reach the open buffer).
             do {
-                _ = try await read(path: change.path)
+                _ = try await readStreaming(path: change.path)
             } catch {
                 log.error("selective reload failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -423,13 +445,13 @@ final class VFSNetworkEngine: ObservableObject {
             if change.type == .remove {
                 // If the path still exists (rename race), re-read; else drop cache.
                 do {
-                    _ = try await read(path: path)
+                    _ = try await readStreaming(path: path)
                 } catch {
                     fileBuffers.removeValue(forKey: path)
                     bufferRevision &+= 1
                 }
             } else {
-                _ = try? await read(path: path)
+                _ = try? await readStreaming(path: path)
             }
             do {
                 _ = try await initialize(root: nil)

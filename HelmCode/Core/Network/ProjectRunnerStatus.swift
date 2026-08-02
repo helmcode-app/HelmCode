@@ -85,7 +85,7 @@ final class ProjectRunnerStatusMonitor: ObservableObject {
         guard let url = project.normalizedRunnerURL else {
             tasks[project.id]?.cancel()
             tasks[project.id] = nil
-            statusByProjectID[project.id] = .none
+            statusByProjectID[project.id] = ProjectRunnerReachability.none
             return
         }
 

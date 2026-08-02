@@ -5,6 +5,7 @@
 //  NavigationSplitView sidebar shell:
 //  • No project — Projects list
 //  • Project open — navigator tabs (Files / Search / Bookmarks / SCM)
+//  • File open → EditorCanvasView streams via vfs/read_chunk (VFSStreamEngine)
 //  • Top bar — system sidebarToggle; global VFS status only when a project is open
 //  • Projects list — per-row runner reachability (list only)
 //  • Bottom — system safeAreaBar Settings row (material / soft edge)

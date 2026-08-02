@@ -129,6 +129,26 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
     let isDirectory: Bool
     let children: [WorkspaceNode]
     let languageHint: String?
+    /// Byte size from VFS tree (`0` for dirs / unknown).
+    let size: Int64
+
+    init(
+        id: String,
+        name: String,
+        path: String,
+        isDirectory: Bool,
+        children: [WorkspaceNode],
+        languageHint: String?,
+        size: Int64 = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.isDirectory = isDirectory
+        self.children = children
+        self.languageHint = languageHint
+        self.size = size
+    }
 
     /// Generic document icon (unfilled) for menus / empty-state chips.
     var systemImage: String {
@@ -194,7 +214,8 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
             path: normalized,
             isDirectory: false,
             children: [],
-            languageHint: FileLanguageHint.resolve(fileName: name)
+            languageHint: FileLanguageHint.resolve(fileName: name),
+            size: 0
         )
     }
 

@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  Code canvas: CodeMirror 6 host + status strip + line bookmarks.
-//  VFS: load via vfs/read; save via vfs/write (autosave + ⌘S); didChange refresh when clean.
+//  VFS: load via vfs/read_chunk stream; save via vfs/write (autosave + ⌘S).
 //  Persistence helpers live in `EditorCanvasView+Persistence.swift`.
 //
 
@@ -35,6 +35,16 @@ struct EditorCanvasView: View {
     /// Bumps so the host re-runs goToLine for the same line if needed.
     @State var revealGeneration: Int = 0
 
+    // MARK: - Chunked stream
+    @StateObject var streamEngine = VFSStreamEngine()
+    @State var streamMode = false
+    @State var streamBeginGeneration: UInt64 = 0
+    @State var streamChunkGeneration: UInt64 = 0
+    @State var streamChunkText = ""
+    @State var streamEndGeneration: UInt64 = 0
+    @State var streamProgress: VFSStreamProgress?
+    @State var isReadOnlyStream = false
+
     var language: CodeMirrorLanguage {
         CodeMirrorLanguage(languageHint: file.languageHint)
     }
@@ -53,23 +63,34 @@ struct EditorCanvasView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if isReadOnlyStream {
+                largeFileBanner
+            }
             ZStack {
                 CodeMirrorHostView(
                     text: buffer,
                     language: language,
                     isDark: colorScheme == .dark,
-                    isEditable: true,
+                    isEditable: !isReadOnlyStream,
                     bookmarkLines: bookmarkLines,
                     revealLine: revealLine,
                     revealGeneration: revealGeneration,
-                    preferSoftTextReplace: usesVFS,
+                    preferSoftTextReplace: usesVFS && !streamMode,
+                    streamMode: streamMode,
+                    streamBeginGeneration: streamBeginGeneration,
+                    streamChunkGeneration: streamChunkGeneration,
+                    streamChunkText: streamChunkText,
+                    streamEndGeneration: streamEndGeneration,
                     onToggleBookmark: { line, text in
                         session.toggleLineBookmark(nodeID: file.id, line: line, lineText: text)
                     },
                     onTextChange: { text in
+                        // Never let CM empty-doc echoes wipe the stream buffer.
+                        guard !streamMode else { return }
                         handleTextChange(text)
                     },
                     onSave: { text in
+                        guard !streamMode, !isReadOnlyStream else { return }
                         handleTextChange(text)
                         Task { await saveNow(content: text) }
                     }
@@ -125,16 +146,36 @@ struct EditorCanvasView: View {
 
     // MARK: - Status
 
+    private var largeFileBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.shield")
+            Text("Large file detected. Streaming in secure Read-Only mode.")
+                .font(.footnote.weight(.medium))
+            Spacer(minLength: 0)
+            if let streamProgress, streamProgress.totalBytes > 0, !streamProgress.isComplete {
+                Text("\(Int(streamProgress.fraction * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.18))
+    }
+
     private var statusBar: some View {
         HStack(spacing: 12) {
             Label(language.displayName, systemImage: "doc.plaintext")
             Text("UTF-8")
             Text("LF")
-            Text("Wrap")
+            Text(isReadOnlyStream ? "Read-only" : "Wrap")
             if usesVFS {
                 Text(vfs.connectionState.isReady ? "VFS" : "VFS…")
                     .foregroundStyle(vfs.connectionState.statusForeground)
-                saveStatusLabel
+                if !isReadOnlyStream {
+                    saveStatusLabel
+                }
             }
             if let loadError {
                 Text(loadError)
