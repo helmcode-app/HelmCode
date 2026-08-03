@@ -12,6 +12,7 @@ struct EditorDetailView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var agent: AgentNetworkEngine
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: (() -> Void)?
 
@@ -47,6 +48,7 @@ struct EditorDetailView: View {
                 session: session,
                 engine: engine,
                 vfs: vfs,
+                agent: agent,
                 runnerStatus: runnerStatus,
                 onOpenSettings: onOpenSettings
             )

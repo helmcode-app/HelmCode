@@ -79,7 +79,8 @@ final class VFSNetworkEngine: ObservableObject {
     private let decoder = JSONDecoder()
 
     init(
-        baseURLString: String = "http://127.0.0.1:8080",
+        // Docker compose host publish port (container listens on 8080).
+        baseURLString: String = "http://127.0.0.1:18080",
         apiToken: String = "",
         initializeRoot: String? = nil,
         requestTimeout: TimeInterval = 30,

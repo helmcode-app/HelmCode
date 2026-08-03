@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  Shared iOS system control chrome (segmented pickers, sheet dismiss, form fields).
+//  Floating glass uses stock iPadOS 26 Liquid Glass APIs only — no hand-drawn rims.
 //
 
 import SwiftUI
@@ -41,6 +42,22 @@ extension View {
         textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .font(.body.monospaced())
+    }
+
+    /**
+     Stock iPadOS 26 Liquid Glass panel — **only** system material + interactive bounce.
+
+     Do not layer custom `separator` strokes or multi-shadow stacks on top:
+     the system glass compositor already draws the rim + ambient elevation
+     (same path as sidebar / toolbar glass). Hand-drawn borders look wrong.
+     */
+    func helmSystemGlassPanel(
+        cornerRadius: CGFloat = 26,
+        interactive: Bool = true
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let glass: Glass = interactive ? .regular.interactive() : .regular
+        return glassEffect(glass, in: shape)
     }
 }
 

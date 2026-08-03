@@ -85,7 +85,7 @@ struct IconListRow: View {
         showsChevron: Bool = true,
         runnerStatus: ProjectRunnerReachability? = nil
     ) {
-        self.title = project.name
+        self.title = project.displayName
         self.subtitle = subtitle ?? project.branchRemoteLine
         self.subtitleMonospaced = subtitleMonospaced
         self.systemImage = nil
@@ -158,7 +158,7 @@ struct ProjectListLabel: View {
             ProjectAvatarIcon(project: project, size: ProjectAvatarMetrics.list)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
+                Text(project.displayName)
                     .lineLimit(1)
                 Text(secondaryText)
                     .font(.caption2.monospaced())

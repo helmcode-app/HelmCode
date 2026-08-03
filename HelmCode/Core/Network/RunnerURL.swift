@@ -45,6 +45,15 @@ enum RunnerURL {
 
     /// Build `ws(s)://host/…/v1/vfs` from an HTTP or WS base URL string.
     static func webSocketVFSURL(fromBase baseURLString: String) -> URL? {
+        webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/vfs")
+    }
+
+    /// Build `ws(s)://host/…/v1/agent` for JSON-RPC `agent/run` orchestration.
+    static func webSocketAgentURL(fromBase baseURLString: String) -> URL? {
+        webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/agent")
+    }
+
+    private static func webSocketURL(fromBase baseURLString: String, pathSuffix: String) -> URL? {
         guard var components = URLComponents(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return nil
         }
@@ -60,9 +69,9 @@ enum RunnerURL {
         }
         let basePath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         if basePath.isEmpty {
-            components.path = "/v1/vfs"
+            components.path = pathSuffix
         } else {
-            components.path = "/\(basePath)/v1/vfs"
+            components.path = "/\(basePath)\(pathSuffix)"
         }
         components.query = nil
         components.fragment = nil

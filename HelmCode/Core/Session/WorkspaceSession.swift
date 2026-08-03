@@ -121,6 +121,77 @@ final class WorkspaceSession: ObservableObject {
         persistProjects()
     }
 
+    /**
+     Apply Project Settings: display name, runner URL, API token.
+     Returns the resulting project id (may change when runner URL changes).
+     */
+    @discardableResult
+    func updateProjectSettings(
+        id: WorkspaceProject.ID,
+        customName: String,
+        runnerURL: String,
+        apiToken: String
+    ) throws -> WorkspaceProject.ID {
+        guard let idx = projects.firstIndex(where: { $0.id == id }) else {
+            throw ProjectSettingsError.projectNotFound
+        }
+        guard RunnerURL.isValid(runnerURL) else {
+            throw ProjectSettingsError.invalidRunnerURL
+        }
+
+        let normalizedURL = RunnerURL.normalizeHTTP(runnerURL)
+        let newID = WorkspaceProject.stableID(forRunnerBaseURL: normalizedURL)
+        let current = projects[idx]
+        let nameOverride = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Reject URL collision with a different project.
+        if let other = projects.first(where: {
+            $0.id != id && $0.normalizedRunnerURL == normalizedURL
+        }) {
+            throw ProjectSettingsError.runnerURLInUse(other.displayName)
+        }
+
+        let updated = WorkspaceProject(
+            id: newID,
+            name: current.name,
+            remote: current.remote,
+            defaultBranch: current.defaultBranch,
+            root: current.root,
+            runnerBaseURL: normalizedURL,
+            customName: nameOverride.isEmpty ? nil : nameOverride,
+            apiToken: token.isEmpty ? nil : token
+        )
+
+        let wasSelected = selectedProjectID == id
+        projects[idx] = updated
+
+        if newID != id {
+            if let sc = sourceControlByProject[id] {
+                sourceControlByProject[newID] = sc
+                sourceControlByProject[id] = nil
+            }
+            recentProjectIDs = recentProjectIDs.map { $0 == id ? newID : $0 }
+            if wasSelected {
+                selectedProjectID = newID
+            }
+        }
+
+        // Drop accidental duplicates by runner URL.
+        var seen = Set<String>()
+        projects = projects.filter { item in
+            guard let url = item.normalizedRunnerURL else { return true }
+            if seen.contains(url) { return item.id == newID }
+            seen.insert(url)
+            return true
+        }
+
+        RunnerConnectionPrefs.remember(url: normalizedURL, token: token)
+        persistRecent()
+        persistProjects()
+        return newID
+    }
+
     func openFile(_ id: WorkspaceNode.ID, revealLine: Int? = nil) {
         selectedFileID = id
         pendingEditorRevealLine = revealLine.map { max(1, $0) }

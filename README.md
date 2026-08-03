@@ -6,25 +6,26 @@ Mobile-first iPad AI coding console — pure SwiftUI shell with a **CodeMirror 6
 
 ```
 HelmCode/
-├── App/                      # @main, RootView shell
+├── App/                      # @main, RootView, WorkspaceRuntimeModifier
 ├── Core/
 │   ├── Models/
-│   │   ├── API/              # open-core Codable types
-│   │   └── Workspace/        # tree, search, SCM models, VFS tree assembler
+│   │   ├── API/              # open-core + Agent domain models
+│   │   └── Workspace/        # tree, search, SCM, language hints
 │   ├── Network/
-│   │   ├── …                 # HTTP task client, RunnerURL, connection sync
-│   │   └── VFS/              # WebSocket JSON-RPC transport only
+│   │   ├── …                 # HTTP client, RunnerURL, BackendConnectionSync
+│   │   ├── Agent*            # /v1/agent WebSocket JSON-RPC engine
+│   │   └── VFS/              # /v1/vfs WebSocket transport + stream
 │   ├── Preferences/          # AppStorage keys, layout metrics
-│   └── Session/              # WorkspaceSession (+ Tree / Bookmarks / SCM / VFS)
+│   └── Session/              # WorkspaceSession (+ Persistence / Tree / VFS / …)
 ├── Features/
 │   ├── Sidebar/              # Projects · navigators · Settings bar
 │   ├── Editor/
-│   │   ├── Welcome/          # start page, Open Project, Browse Projects
+│   │   ├── Welcome/          # start page, Open Project, project settings
 │   │   ├── CodeMirror/       # CM6 host (Swift + offline web assets)
 │   │   └── Editor*.swift     # detail routing, canvas, empty, switcher
-│   ├── Commander/            # inspector: prompt + timeline
-│   └── Settings/             # appearance / layout / backend / shortcuts link
-└── Shared/UI/                # system chrome, search field, cards, toggles
+│   ├── Commander/            # AgentCommandPanel + timeline + prompt tags
+│   └── Settings/             # appearance / layout / shortcuts
+└── Shared/UI/                # chrome, search field, avatars, file type icons
 ```
 
 | Layer | Responsibility |
@@ -102,17 +103,28 @@ Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`
 
 ## Backend
 
-Default: `http://127.0.0.1:8080` (runner-core open-core).
+Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see runner-core `compose.dev.yaml`).
 
 | Route | Role |
 |-------|------|
 | `GET /health` | Mode + liveness |
 | `GET /v1/status` | Runtime snapshot |
-| `POST /v1/tasks` | Async submit → `202` |
+| `POST /v1/tasks` | Async submit → `202` (legacy HTTP path) |
 | `GET /v1/tasks/:id` | Poll status / events / result |
 | `POST /v1/tasks/:id/cancel` | Cancel |
+| `WS /v1/agent` | **Agent command panel** — `agent/run` + progress stream |
+| `WS /v1/vfs` | Workspace tree / chunked read / write |
 
-Optional: `Authorization: Bearer <OPENCORE_API_TOKEN>` in **Settings → Backend**.
+### Agent Commander (inspector)
+
+| Component | Role |
+|-----------|------|
+| `AgentCommandPanel` | Prompt editor, `@path` tags → `contextPaths`, launch controls |
+| `AgentTimelineView` | Real-time stage-colored log stream (`EventLog` nodes) |
+| `AgentNetworkEngine` | `URLSessionWebSocketTask` JSON-RPC client + controller state machine |
+| `AgentJSONRPC` | Shared wire envelopes / socket state / errors |
+
+Optional Bearer (`OPENCORE_API_TOKEN`): enter when **Open Project → Self-hosted** (stored for reopens; not a separate Settings backend).
 
 ## CodeMirror 6
 

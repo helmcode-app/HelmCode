@@ -17,6 +17,7 @@ struct SidebarView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var agent: AgentNetworkEngine
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: () -> Void
 
@@ -25,6 +26,7 @@ struct SidebarView: View {
     @State private var dialog: SidebarTreeDialog?
     @State private var nameDraft = ""
     @State private var commitMessage = ""
+    @State private var projectSettingsID: WorkspaceProject.ID?
 
     private var navigator: Binding<SidebarNavigator> {
         Binding(
@@ -158,22 +160,40 @@ struct SidebarView: View {
                             )
                         }
                         .contextMenu {
-                            Button(role: .destructive) {
-                                session.removeProject(project.id)
-                            } label: {
-                                Label("Remove Project", systemImage: "trash")
-                            }
+                            ProjectListContextMenu(
+                                project: project,
+                                onProjectSettings: { projectSettingsID = project.id },
+                                onRemoveProject: { session.removeProject(project.id) }
+                            )
                         }
                     }
                 }
             } header: {
                 Text("Projects")
             } footer: {
-                Text("Projects are added via Open Project and kept on this device.")
+                Text("Projects are added via Open Project and kept on this device. Long-press for Project Settings.")
                     .font(.caption2)
             }
         }
         .helmSidebarListStyle()
+        .sheet(isPresented: Binding(
+            get: { projectSettingsID != nil },
+            set: { if !$0 { projectSettingsID = nil } }
+        )) {
+            if let id = projectSettingsID {
+                ProjectSettingsSheet(
+                    session: session,
+                    engine: engine,
+                    vfs: vfs,
+                    agent: agent,
+                    projectID: id,
+                    isPresented: Binding(
+                        get: { projectSettingsID != nil },
+                        set: { if !$0 { projectSettingsID = nil } }
+                    )
+                )
+            }
+        }
     }
 
     // MARK: - Tree dialogs

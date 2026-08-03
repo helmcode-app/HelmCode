@@ -90,7 +90,7 @@ struct SidebarSearchView: View {
         if trimmedQuery.isEmpty {
             SidebarEmptyPlaceholder(
                 title: "Search in Project",
-                subtitle: "Find text across files in \(project.name)."
+                subtitle: "Find text across files in \(project.displayName)."
             )
         } else if hasSearched, groups.isEmpty {
             SidebarEmptyPlaceholder(

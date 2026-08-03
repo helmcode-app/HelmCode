@@ -11,11 +11,13 @@ struct EditorWelcomeView: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var agent: AgentNetworkEngine
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
     var onOpenSettings: (() -> Void)?
 
     @State private var isOpenProjectPresented = false
     @State private var isBrowseProjectsPresented = false
+    @State private var projectSettingsID: WorkspaceProject.ID?
 
     private enum Metrics {
         /// Recent list on the welcome page (More opens the full browser).
@@ -48,6 +50,7 @@ struct EditorWelcomeView: View {
                 session: session,
                 engine: engine,
                 vfs: vfs,
+                agent: agent,
                 isPresented: $isOpenProjectPresented
             )
         }
@@ -56,9 +59,28 @@ struct EditorWelcomeView: View {
                 session: session,
                 engine: engine,
                 vfs: vfs,
+                agent: agent,
                 runnerStatus: runnerStatus,
                 isPresented: $isBrowseProjectsPresented
             )
+        }
+        .sheet(isPresented: Binding(
+            get: { projectSettingsID != nil },
+            set: { if !$0 { projectSettingsID = nil } }
+        )) {
+            if let id = projectSettingsID {
+                ProjectSettingsSheet(
+                    session: session,
+                    engine: engine,
+                    vfs: vfs,
+                    agent: agent,
+                    projectID: id,
+                    isPresented: Binding(
+                        get: { projectSettingsID != nil },
+                        set: { if !$0 { projectSettingsID = nil } }
+                    )
+                )
+            }
         }
         .task {
             runnerStatus.refresh(projects: session.projects, engine: engine)
@@ -202,16 +224,12 @@ struct EditorWelcomeView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button(role: .destructive) {
-                session.removeFromRecents(project.id)
-            } label: {
-                Label("Remove from Recents", systemImage: "trash")
-            }
-            Button(role: .destructive) {
-                session.removeProject(project.id)
-            } label: {
-                Label("Remove Project", systemImage: "folder.badge.minus")
-            }
+            ProjectListContextMenu(
+                project: project,
+                onProjectSettings: { projectSettingsID = project.id },
+                onRemoveFromRecents: { session.removeFromRecents(project.id) },
+                onRemoveProject: { session.removeProject(project.id) }
+            )
         }
     }
 }
@@ -221,6 +239,7 @@ struct EditorWelcomeView: View {
         session: WorkspaceSession(),
         engine: HelmCodeNetworkEngine(),
         vfs: VFSNetworkEngine(),
+        agent: AgentNetworkEngine(),
         runnerStatus: ProjectRunnerStatusMonitor()
     )
 }

@@ -37,18 +37,26 @@ enum VFSConnectOutcome: Equatable {
 
 @MainActor
 enum VFSConnect {
-    /// Normalize URL, sync engines, health-check, start VFS, optionally apply tree.
+    /// Normalize URL, sync engines, health-check, start VFS (+ Agent), optionally apply tree.
     static func openSelfHosted(
         urlString: String,
+        token: String? = nil,
         engine: HelmCodeNetworkEngine,
         vfs: VFSNetworkEngine,
         session: WorkspaceSession,
+        agent: AgentNetworkEngine? = nil,
         waitAttempts: Int = 40,
         waitNanos: UInt64 = 100_000_000
     ) async throws -> VFSConnectOutcome {
         guard RunnerURL.isValid(urlString) else { throw VFSConnectError.invalidURL }
 
-        BackendConnectionSync.apply(urlString: urlString, engine: engine, vfs: vfs)
+        BackendConnectionSync.apply(
+            urlString: urlString,
+            token: token,
+            engine: engine,
+            vfs: vfs,
+            agent: agent
+        )
 
         await engine.checkBackendHealth()
         if case .offline(let message) = engine.connectionState {
@@ -56,6 +64,7 @@ enum VFSConnect {
         }
 
         vfs.start()
+        agent?.bindToProjectRunner(from: engine)
 
         for _ in 0..<waitAttempts {
             // Require `.connected` (set only after initialize) + fresh tree snapshot.

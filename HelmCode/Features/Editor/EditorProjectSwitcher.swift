@@ -38,9 +38,9 @@ struct EditorProjectSwitcher: View {
                 session.openProject(project.id)
             } label: {
                 if project.id == session.selectedProjectID {
-                    Label(project.name, systemImage: "checkmark")
+                    Label(project.displayName, systemImage: "checkmark")
                 } else {
-                    Text(project.name)
+                    Text(project.displayName)
                 }
             }
         }
@@ -71,6 +71,6 @@ struct EditorProjectSwitcher: View {
 
     /// Full project name — initials belong only on the avatar image.
     private var currentTitle: String {
-        session.selectedProject?.name ?? "Project"
+        session.selectedProject?.displayName ?? "Project"
     }
 }

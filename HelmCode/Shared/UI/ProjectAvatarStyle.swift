@@ -26,7 +26,7 @@ struct ProjectAvatarIdentity: Hashable, Sendable {
     }
 
     init(project: WorkspaceProject) {
-        self.name = project.name
+        self.name = project.displayName
         self.seed = project.id
     }
 

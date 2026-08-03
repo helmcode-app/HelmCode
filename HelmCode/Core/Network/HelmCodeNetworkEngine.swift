@@ -44,7 +44,8 @@ final class HelmCodeNetworkEngine: ObservableObject {
     private let pollInterval: TimeInterval
 
     init(
-        baseURL: String = "http://127.0.0.1:8080",
+        // Docker compose maps host 18080 → container 8080 (see runner-core compose.dev.yaml).
+        baseURL: String = "http://127.0.0.1:18080",
         apiToken: String = "",
         pollInterval: TimeInterval = 0.75,
         session: URLSession = .shared

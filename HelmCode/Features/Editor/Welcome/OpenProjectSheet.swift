@@ -2,8 +2,8 @@
 //  OpenProjectSheet.swift
 //  HelmCode
 //
-//  Open Project: Hosted (reserved) | Self-hosted (runner-core URL).
-//  Tabs use the same large iOS segmented control as the sidebar navigator.
+//  Open Project: Hosted (reserved) | Self-hosted (runner URL + optional token).
+//  This is the only place to bind a workspace to a runner-core instance.
 //
 
 import SwiftUI
@@ -26,10 +26,12 @@ struct OpenProjectSheet: View {
     @ObservedObject var session: WorkspaceSession
     @ObservedObject var engine: HelmCodeNetworkEngine
     @ObservedObject var vfs: VFSNetworkEngine
+    @ObservedObject var agent: AgentNetworkEngine
     @Binding var isPresented: Bool
 
     @State private var tab: OpenProjectDeploymentTab = .selfHosted
     @State private var runnerURL: String = ""
+    @State private var apiToken: String = ""
     @State private var isConnecting = false
     @State private var errorMessage: String?
 
@@ -50,7 +52,10 @@ struct OpenProjectSheet: View {
             }
             .onAppear {
                 if runnerURL.isEmpty {
-                    runnerURL = engine.baseURLString
+                    runnerURL = RunnerConnectionPrefs.lastURL()
+                }
+                if apiToken.isEmpty {
+                    apiToken = RunnerConnectionPrefs.apiToken()
                 }
             }
             .alert(
@@ -120,13 +125,24 @@ struct OpenProjectSheet: View {
     private var selfHostedForm: some View {
         Form {
             Section {
-                TextField("https://runner.example.com:8080", text: $runnerURL)
+                TextField("http://127.0.0.1:18080", text: $runnerURL)
                     .helmURLFieldStyle()
                     .disabled(isConnecting)
             } header: {
                 Text("Runner URL")
             } footer: {
-                Text("Point at your open-core runner-core instance. VFS uses the same host at /v1/vfs.")
+                Text("Docker compose publishes host port 18080 → container 8080. Same host serves HTTP, VFS (/v1/vfs), and Agent (/v1/agent).")
+            }
+
+            Section {
+                SecureField("Bearer token (optional)", text: $apiToken)
+                    .helmMonospacedFieldStyle()
+                    .disabled(isConnecting)
+                    .textContentType(.password)
+            } header: {
+                Text("API Token")
+            } footer: {
+                Text("Required only when the runner sets OPENCORE_API_TOKEN. Leave empty for unauthenticated local dev.")
             }
 
             Section {
@@ -162,13 +178,29 @@ struct OpenProjectSheet: View {
         isConnecting = true
         defer { isConnecting = false }
 
+        let url = RunnerURL.normalizeHTTP(runnerURL)
+        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+
         do {
             _ = try await VFSConnect.openSelfHosted(
-                urlString: runnerURL,
+                urlString: url,
+                token: token.isEmpty ? nil : token,
                 engine: engine,
                 vfs: vfs,
-                session: session
+                session: session,
+                agent: agent
             )
+            RunnerConnectionPrefs.remember(url: url, token: token)
+            // Stamp token onto the opened project so Project Settings / reopen use it.
+            if let id = session.selectedProjectID,
+               let project = session.projects.first(where: { $0.id == id }) {
+                _ = try? session.updateProjectSettings(
+                    id: id,
+                    customName: project.customName ?? "",
+                    runnerURL: url,
+                    apiToken: token
+                )
+            }
             isPresented = false
         } catch {
             errorMessage = error.localizedDescription

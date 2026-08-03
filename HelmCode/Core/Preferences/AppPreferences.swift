@@ -26,6 +26,43 @@ enum AppStorageKey {
     static let workspaceBookmarks = "helm.workspace.bookmarks"
     /// Selected sidebar navigator tab (`SidebarNavigator.rawValue`).
     static let sidebarNavigator = "helm.sidebar.navigator"
+    /// Last successful Open Project runner URL (prefill only).
+    static let lastRunnerURL = "helm.runner.lastURL"
+    /// Optional Bearer for open-core (`OPENCORE_API_TOKEN`); applied when opening / reactivating projects.
+    static let runnerAPIToken = "helm.runner.apiToken"
+}
+
+// MARK: - Last self-hosted runner (Open Project)
+
+enum RunnerConnectionPrefs {
+    static let defaultURL = "http://127.0.0.1:18080"
+
+    static func lastURL(defaults: UserDefaults = .standard) -> String {
+        let raw = defaults.string(forKey: AppStorageKey.lastRunnerURL)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if RunnerURL.isValid(raw) {
+            return RunnerURL.normalizeHTTP(raw)
+        }
+        return defaultURL
+    }
+
+    static func apiToken(defaults: UserDefaults = .standard) -> String {
+        defaults.string(forKey: AppStorageKey.runnerAPIToken)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    static func remember(url: String, token: String, defaults: UserDefaults = .standard) {
+        let normalized = RunnerURL.normalizeHTTP(url)
+        if RunnerURL.isValid(normalized) {
+            defaults.set(normalized, forKey: AppStorageKey.lastRunnerURL)
+        }
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            defaults.removeObject(forKey: AppStorageKey.runnerAPIToken)
+        } else {
+            defaults.set(trimmed, forKey: AppStorageKey.runnerAPIToken)
+        }
+    }
 }
 
 // MARK: - Layout metrics

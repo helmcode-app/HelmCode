@@ -177,16 +177,44 @@ struct CommandResult: Codable, Sendable, Equatable {
 }
 
 struct TaskProgressEvent: Codable, Sendable, Equatable, Identifiable {
-    var id: String { "\(taskId)-\(at)-\(status.rawValue)-\(message.hashValue)" }
+    var id: String {
+        let stageKey = stage?.rawValue ?? status.rawValue
+        let cycleKey = cycle.map(String.init) ?? "-"
+        return "\(taskId)-\(at)-\(stageKey)-\(cycleKey)-\(message.hashValue)"
+    }
 
     let taskId: String
     let status: TaskStatus
     let message: String
     let at: String
+    /// Structured orchestration stage from `HelmCodeAgentEngine` timeline.
+    let stage: AgentEventStage?
+    /// 1-based self-heal / test cycle when applicable.
+    let cycle: Int?
     let detail: [String: JSONValue]?
 
+    init(
+        taskId: String,
+        status: TaskStatus,
+        message: String,
+        at: String,
+        stage: AgentEventStage? = nil,
+        cycle: Int? = nil,
+        detail: [String: JSONValue]? = nil
+    ) {
+        self.taskId = taskId
+        self.status = status
+        self.message = message
+        self.at = at
+        self.stage = stage
+        self.cycle = cycle
+        self.detail = detail
+    }
+
     var timestamp: Date {
-        ISO8601DateFormatter.helm.date(from: at) ?? .distantPast
+        ISO8601DateFormatter.helm.date(from: at)
+            ?? ISO8601DateFormatter.helmNoFraction.date(from: at)
+            ?? .distantPast
     }
 }
 

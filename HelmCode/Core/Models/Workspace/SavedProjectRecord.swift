@@ -12,16 +12,30 @@ import Foundation
 struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
     let id: String
     let name: String
+    /// User override; omitted when never customized.
+    let customName: String?
     let remote: String
     let defaultBranch: String
     let runnerBaseURL: String
+    /// Optional Bearer for this runner; omit when empty.
+    let apiToken: String?
 
-    init(id: String, name: String, remote: String, defaultBranch: String, runnerBaseURL: String) {
+    init(
+        id: String,
+        name: String,
+        remote: String,
+        defaultBranch: String,
+        runnerBaseURL: String,
+        customName: String? = nil,
+        apiToken: String? = nil
+    ) {
         self.id = id
         self.name = name
+        self.customName = customName
         self.remote = remote
         self.defaultBranch = defaultBranch
         self.runnerBaseURL = runnerBaseURL
+        self.apiToken = apiToken
     }
 
     init?(project: WorkspaceProject) {
@@ -32,21 +46,30 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
         }
         self.id = project.id
         self.name = project.name
+        self.customName = project.customName
         self.remote = project.remote
         self.defaultBranch = project.defaultBranch
         self.runnerBaseURL = RunnerURL.normalizeHTTP(url)
+        self.apiToken = project.apiToken
     }
 
     /// Placeholder tree until VFS reconnects and fills children.
     func asWorkspaceProject() -> WorkspaceProject {
-        let rootName = name.isEmpty ? "project" : name
+        let label = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rootName: String = {
+            if !label.isEmpty { return label }
+            let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return n.isEmpty ? "project" : n
+        }()
         return WorkspaceProject(
             id: id,
             name: name,
             remote: remote,
             defaultBranch: defaultBranch,
             root: WorkspaceNode.emptyRoot(name: rootName),
-            runnerBaseURL: runnerBaseURL
+            runnerBaseURL: runnerBaseURL,
+            customName: customName,
+            apiToken: apiToken
         )
     }
 }

@@ -34,7 +34,10 @@ extension WorkspaceSession {
                 previous: existing?.defaultBranch
             ),
             root: tree,
-            runnerBaseURL: normalizedURL
+            runnerBaseURL: normalizedURL,
+            // Preserve Project Settings overrides across VFS refresh.
+            customName: existing?.customName,
+            apiToken: existing?.apiToken
         )
 
         let previousSelection = selectedFileID

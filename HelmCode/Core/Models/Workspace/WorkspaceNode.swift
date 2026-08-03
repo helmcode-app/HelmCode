@@ -12,12 +12,17 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
     static let vfsRemoteID = "vfs-remote"
 
     let id: String
+    /// Server / VFS-derived label (may refresh on reconnect).
     let name: String
+    /// User override from Project Settings; empty/nil → use `name`.
+    let customName: String?
     let remote: String
     let defaultBranch: String
     let root: WorkspaceNode
     /// Runner-core HTTP base URL for this project (`nil` = no remote API / not a real workspace).
     let runnerBaseURL: String?
+    /// Optional Bearer for this project's runner (`OPENCORE_API_TOKEN`).
+    let apiToken: String?
 
     init(
         id: String,
@@ -25,14 +30,31 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         remote: String,
         defaultBranch: String,
         root: WorkspaceNode,
-        runnerBaseURL: String? = nil
+        runnerBaseURL: String? = nil,
+        customName: String? = nil,
+        apiToken: String? = nil
     ) {
         self.id = id
         self.name = name
+        self.customName = Self.normalizedOptional(customName)
         self.remote = remote
         self.defaultBranch = defaultBranch
         self.root = root
         self.runnerBaseURL = runnerBaseURL
+        self.apiToken = Self.normalizedOptional(apiToken)
+    }
+
+    /// Title for lists / switcher / chrome.
+    var displayName: String {
+        if let customName, !customName.isEmpty { return customName }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Project" : trimmed
+    }
+
+    private static func normalizedOptional(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Stable id for a self-hosted runner URL (survives restarts; one project per URL).
@@ -106,10 +128,14 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
 
     func with(
         name: String? = nil,
+        customName: String? = nil,
+        keepCustomName: Bool = true,
         remote: String? = nil,
         defaultBranch: String? = nil,
         root: WorkspaceNode? = nil,
-        runnerBaseURL: String? = nil
+        runnerBaseURL: String? = nil,
+        apiToken: String? = nil,
+        keepAPIToken: Bool = true
     ) -> WorkspaceProject {
         WorkspaceProject(
             id: id,
@@ -117,7 +143,9 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
             remote: remote ?? self.remote,
             defaultBranch: defaultBranch ?? self.defaultBranch,
             root: root ?? self.root,
-            runnerBaseURL: runnerBaseURL ?? self.runnerBaseURL
+            runnerBaseURL: runnerBaseURL ?? self.runnerBaseURL,
+            customName: keepCustomName ? (customName ?? self.customName) : customName,
+            apiToken: keepAPIToken ? (apiToken ?? self.apiToken) : apiToken
         )
     }
 }
