@@ -13,7 +13,7 @@ HelmCode/
 │   │   └── Workspace/        # tree, search, SCM, language hints
 │   ├── Network/
 │   │   ├── …                 # HTTP client, RunnerURL, BackendConnectionSync
-│   │   ├── Agent*            # /v1/agent WebSocket JSON-RPC engine
+│   │   ├── Agent/            # /v1/agent WebSocket JSON-RPC engine
 │   │   └── VFS/              # /v1/vfs WebSocket transport + stream
 │   ├── Preferences/          # AppStorage keys, layout metrics
 │   └── Session/              # WorkspaceSession (+ Persistence / Tree / VFS / …)
@@ -119,10 +119,12 @@ Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see ru
 
 | Component | Role |
 |-----------|------|
-| `AgentCommandPanel` | Prompt editor, `@path` tags → `contextPaths`, launch controls |
-| `AgentTimelineView` | Real-time stage-colored log stream (`EventLog` nodes) |
-| `AgentNetworkEngine` | `URLSessionWebSocketTask` JSON-RPC client + controller state machine |
-| `AgentJSONRPC` | Shared wire envelopes / socket state / errors |
+| `AgentCommandPanel` | Shell: header + timeline + safe-area composer dock |
+| `AgentCommandComposer` | Prompt / branch / mode / model / send (glass dock) |
+| `AgentTimelineView` | Session scroll list (`EventLog`); nodes in `AgentTimelineNodes` |
+| `AgentTimelineBuilders` | Local “YOU” command event construction |
+| `AgentNetworkEngine` | `URLSessionWebSocketTask` JSON-RPC + controller state machine |
+| `AgentJSONRPC` | Wire envelopes / socket state / errors (`Core/Network/Agent/`) |
 
 Optional Bearer (`OPENCORE_API_TOKEN`): enter when **Open Project → Self-hosted** (stored for reopens; not a separate Settings backend).
 

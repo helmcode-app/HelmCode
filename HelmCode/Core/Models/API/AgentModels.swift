@@ -33,10 +33,14 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
     case selfHealingActive = "self_healing_active"
     case gitPushed = "git_pushed"
 
+    /// Client-only: the prompt the user sent (not emitted by runner-core).
+    case userCommand = "user_command"
+
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .userCommand: return "You"
         case .accepted: return "Accepted"
         case .worktreeReady, .provisioning: return "Provisioning"
         case .contextBuilt: return "Context"
@@ -57,6 +61,8 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
     /// Visual family used by timeline badges.
     var badgeKind: AgentTimelineBadgeKind {
         switch self {
+        case .userCommand:
+            return .user
         case .accepted, .worktreeReady, .provisioning, .contextBuilt, .llmInvoke, .llmPatched, .testing, .committing, .pushing:
             return .provisioning
         case .testFailed, .selfHealing, .selfHealingActive, .failed:
@@ -81,6 +87,7 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
 }
 
 enum AgentTimelineBadgeKind: Sendable, Equatable {
+    case user
     case provisioning
     case warning
     case success

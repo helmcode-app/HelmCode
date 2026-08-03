@@ -215,6 +215,16 @@ final class AgentNetworkEngine: ObservableObject {
         pollStatus = .queued
         branch = "aero-agent/\(params.taskId)"
 
+        // Surface the outgoing command in the session timeline immediately.
+        appendUserCommandEvent(
+            taskId: params.taskId,
+            prompt: trimmed,
+            mode: composerMode,
+            modelID: modelID,
+            baseBranch: params.baseBranch ?? baseBranch,
+            contextPaths: contextPaths
+        )
+
         do {
             let acceptedResult: AgentRunAccepted = try await call(
                 method: "agent/run",
@@ -224,6 +234,8 @@ final class AgentNetworkEngine: ObservableObject {
             activeTaskID = acceptedResult.taskId
             branch = acceptedResult.branch
             phase = .processing
+            // Prompt was copied into `params` — clear the composer for the next command.
+            prompt = ""
             startPolling(taskId: acceptedResult.taskId)
             log.info("agent/run accepted taskId=\(acceptedResult.taskId, privacy: .public) branch=\(acceptedResult.branch, privacy: .public)")
             return acceptedResult
@@ -726,6 +738,27 @@ final class AgentNetworkEngine: ObservableObject {
             detail: nil
         )
         ingestProgress(event)
+    }
+
+    /// Local-only timeline node for the prompt the user just sent (mode / model / branch / files).
+    private func appendUserCommandEvent(
+        taskId: String,
+        prompt: String,
+        mode: AgentComposerMode,
+        modelID: String,
+        baseBranch: String,
+        contextPaths: [String]
+    ) {
+        ingestProgress(
+            AgentTimelineBuilders.userCommandEvent(
+                taskId: taskId,
+                prompt: prompt,
+                mode: mode,
+                modelID: modelID,
+                baseBranch: baseBranch,
+                contextPaths: contextPaths
+            )
+        )
     }
 
     private func waitUntilConnected(timeout: TimeInterval) async throws {
