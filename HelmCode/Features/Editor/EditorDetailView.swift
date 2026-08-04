@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  NavigationSplitView detail: welcome → empty project → CodeMirror, or full-column Terminal.
-//  Top toolbar (⌘J) toggles exclusive Code ↔ Terminal in the center column.
+//  Terminal is project-scoped (like Agent). ⌘J toggles visibility; PTY keep-alive until exit / project change.
 //
 
 import SwiftUI
@@ -19,6 +19,12 @@ struct EditorDetailView: View {
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
     @AppStorage(AppStorageKey.showTerminal) private var showTerminal = false
 
+    /// Bumped on project switch / close / shell `exit` so Terminal fully resets.
+    @State private var terminalSessionEpoch: UInt64 = 0
+
+    private var canUseTerminal: Bool { session.selectedProject != nil }
+    private var showingTerminal: Bool { showTerminal && canUseTerminal }
+
     var body: some View {
         centerColumn
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -30,35 +36,43 @@ struct EditorDetailView: View {
             .toolbar(removing: .sidebarToggle)
             .toolbar { detailToolbar }
             .background { terminalKeyboardShortcut }
+            .onChange(of: session.selectedProjectID) { oldID, newID in
+                handleProjectChange(from: oldID, to: newID)
+            }
+            .onAppear {
+                if !canUseTerminal, showTerminal { showTerminal = false }
+            }
     }
 
-    // MARK: - Center column (editor XOR terminal)
+    // MARK: - Center column (editor ⊕ mounted Terminal)
 
+    /// Terminal stays in the hierarchy (opacity 0) while a project is open so ⌘J
+    /// does not destroy WKWebView / WebSocket / scrollback.
     @ViewBuilder
     private var centerColumn: some View {
-        if showTerminal {
-            TerminalPanelView(
-                engine: engine,
-                isPresented: terminalPresented
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity)
-        } else {
+        ZStack {
             surfaceContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
-        }
-    }
+                .opacity(showingTerminal ? 0 : 1)
+                .allowsHitTesting(!showingTerminal)
+                .accessibilityHidden(showingTerminal)
 
-    private var terminalPresented: Binding<Bool> {
-        Binding(
-            get: { showTerminal },
-            set: { newValue in
-                withAnimation(LayoutMetrics.panelSlideAnimation) {
-                    showTerminal = newValue
-                }
+            if let project = session.selectedProject {
+                TerminalPanelView(
+                    engine: engine,
+                    projectID: project.id,
+                    projectRunnerURL: project.normalizedRunnerURL ?? project.runnerBaseURL,
+                    isVisible: showingTerminal,
+                    sessionEpoch: terminalSessionEpoch,
+                    onSessionEnded: handleShellExit,
+                    onHide: hideTerminal
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(showingTerminal ? 1 : 0)
+                .allowsHitTesting(showingTerminal)
+                .accessibilityHidden(!showingTerminal)
             }
-        )
+        }
     }
 
     // MARK: - Surfaces
@@ -98,11 +112,9 @@ struct EditorDetailView: View {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(placement: .topBarTrailing) {
-            // HStack so Divider is vertical; ToolbarItemGroup can stack and turn it into a hairline.
             HStack(spacing: 10) {
                 terminalToggleButton
-                Divider()
-                    .frame(height: 16)
+                Divider().frame(height: 16)
                 InspectorToggleButton(isExpanded: showCommander, action: toggleCommander)
             }
         }
@@ -110,20 +122,29 @@ struct EditorDetailView: View {
 
     private var terminalToggleButton: some View {
         Button(action: toggleTerminal) {
-            // Destination icon: Code when on Terminal, Terminal when on editor.
-            Image(systemName: showTerminal
+            Image(systemName: showingTerminal
                 ? "chevron.left.forwardslash.chevron.right"
                 : "terminal")
         }
-        .accessibilityLabel(showTerminal ? "Show Editor" : "Show Terminal")
-        .help(showTerminal ? "Show Editor (⌘J)" : "Show Terminal (⌘J)")
-        .keyboardShortcut("j", modifiers: .command)
+        .disabled(!canUseTerminal)
+        .foregroundStyle(canUseTerminal ? Color.primary : Color.secondary.opacity(0.45))
+        .accessibilityLabel(
+            canUseTerminal
+                ? (showingTerminal ? "Show Editor" : "Show Terminal")
+                : "Terminal unavailable — open a project"
+        )
+        .help(
+            canUseTerminal
+                ? (showingTerminal ? "Show Editor (⌘J)" : "Show Terminal (⌘J)")
+                : "Open a project to use the terminal"
+        )
     }
 
-    /// Global ⌘J even when the toolbar button is not the focus target.
+    /// Sole ⌘J registration (not also on the toolbar button).
     private var terminalKeyboardShortcut: some View {
         Button("", action: toggleTerminal)
             .keyboardShortcut("j", modifiers: .command)
+            .disabled(!canUseTerminal)
             .frame(width: 0, height: 0)
             .opacity(0)
             .accessibilityHidden(true)
@@ -134,10 +155,8 @@ struct EditorDetailView: View {
         switch session.editorSurface {
         case .welcome:
             PlainToolbarLabel(title: "Welcome")
-
         case .emptyProject:
             EditorProjectSwitcher(session: session)
-
         case .editing(_, let file):
             HStack(spacing: 10) {
                 EditorProjectSwitcher(session: session)
@@ -146,6 +165,8 @@ struct EditorDetailView: View {
         }
     }
 
+    // MARK: - Actions
+
     private func toggleCommander() {
         withAnimation(LayoutMetrics.panelSlideAnimation) {
             showCommander.toggle()
@@ -153,8 +174,28 @@ struct EditorDetailView: View {
     }
 
     private func toggleTerminal() {
-        withAnimation(LayoutMetrics.panelSlideAnimation) {
-            showTerminal.toggle()
-        }
+        guard canUseTerminal else { return }
+        if showingTerminal { hideTerminal() } else { openTerminal() }
+    }
+
+    private func openTerminal() {
+        guard canUseTerminal else { return }
+        withAnimation(LayoutMetrics.panelSlideAnimation) { showTerminal = true }
+    }
+
+    private func hideTerminal() {
+        withAnimation(LayoutMetrics.panelSlideAnimation) { showTerminal = false }
+    }
+
+    /// Remote shell `exit`: leave Terminal UI and invalidate keep-alive.
+    private func handleShellExit() {
+        hideTerminal()
+        terminalSessionEpoch &+= 1
+    }
+
+    private func handleProjectChange(from oldID: String?, to newID: String?) {
+        guard oldID != newID else { return }
+        terminalSessionEpoch &+= 1
+        if showTerminal { hideTerminal() }
     }
 }

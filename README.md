@@ -53,6 +53,10 @@ HelmCode/
 | No project open | `EditorWelcomeView` | Welcome |
 | Project open, no file | `EditorEmptyStateView` | Project switcher |
 | File selected | `EditorCanvasView` | Project switcher + file name |
+| Terminal mode (⌘J) | `TerminalPanelView` (project-scoped WebSSH) | Same; toggle icon gray without project |
+
+**Terminal session:** kept alive across ⌘J hide/show; wiped on project switch/close or shell `exit`.  
+Details: `Features/Editor/Terminal/WebSSH.md`.
 
 **Welcome → Open Project:** Hosted (placeholder) | Self-hosted URL (`OpenProjectSheet`).  
 Projects are **only** added via Open Project (no seed mocks). Metadata is cached in `UserDefaults`; trees reload from VFS on open.  

@@ -2,15 +2,24 @@
 //  TerminalPanelView.swift
 //  HelmCode
 //
-//  Full-column WebSSH terminal (exclusive with the code editor in the center column).
-//  Background matches the editor column (`Color(.systemBackground)`) in light & dark.
+//  Full-column WebSSH chrome for the open project.
+//  Kept mounted while the project stays open so ⌘J hide/show preserves the PTY session.
 //
 
 import SwiftUI
 
 struct TerminalPanelView: View {
     @ObservedObject var engine: HelmCodeNetworkEngine
-    @Binding var isPresented: Bool
+    var projectID: String
+    var projectRunnerURL: String?
+    /// Whether the terminal surface is visible (⌘J).
+    var isVisible: Bool
+    /// Bumped when the open project changes / closes / shell exits.
+    var sessionEpoch: UInt64
+    /// Leave Terminal mode after remote `exit`.
+    var onSessionEnded: () -> Void
+    /// Return to editor without killing the session (x button).
+    var onHide: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -19,7 +28,10 @@ struct TerminalPanelView: View {
     @State private var reconnectGeneration: UInt64 = 0
 
     private var runnerURL: String {
-        RunnerURL.httpBase(from: engine.baseURLString, fallback: RunnerConnectionPrefs.defaultURL)
+        TerminalEndpoint.httpBase(
+            projectRunnerURL: projectRunnerURL,
+            engineBaseURL: engine.baseURLString
+        )
     }
 
     var body: some View {
@@ -28,15 +40,19 @@ struct TerminalPanelView: View {
             TerminalHostView(
                 baseURLString: runnerURL,
                 apiToken: engine.apiToken,
+                projectID: projectID,
                 isDark: colorScheme == .dark,
                 reconnectGeneration: reconnectGeneration,
-                isActive: isPresented,
+                sessionEpoch: sessionEpoch,
+                isVisible: isVisible && !projectID.isEmpty,
                 onStatus: { text, kind in
                     statusText = text
                     statusKind = kind
-                }
+                },
+                onSessionEnded: { _ in onSessionEnded() }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .id(projectID)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
@@ -76,11 +92,7 @@ struct TerminalPanelView: View {
             .foregroundStyle(.secondary)
             .accessibilityLabel("Reconnect terminal")
 
-            Button {
-                withAnimation(LayoutMetrics.panelSlideAnimation) {
-                    isPresented = false
-                }
-            } label: {
+            Button(action: onHide) {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.semibold))
             }
@@ -96,5 +108,21 @@ struct TerminalPanelView: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
+    }
+}
+
+// MARK: - Endpoint helper
+
+enum TerminalEndpoint {
+    /// Prefer project runner URL, then engine base, then app default.
+    static func httpBase(projectRunnerURL: String?, engineBaseURL: String) -> String {
+        let preferred = projectRunnerURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !preferred.isEmpty {
+            return RunnerURL.httpBase(from: preferred, fallback: engineBaseURL)
+        }
+        return RunnerURL.httpBase(
+            from: engineBaseURL,
+            fallback: RunnerConnectionPrefs.defaultURL
+        )
     }
 }

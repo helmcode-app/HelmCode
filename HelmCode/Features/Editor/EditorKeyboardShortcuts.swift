@@ -73,7 +73,7 @@ enum EditorKeyboardShortcutsCatalog {
             .init(keys: "⌘ ⌥ .", action: "Toggle fold at cursor"),
         ]),
         EditorShortcutSection(title: "Panels", items: [
-            .init(keys: "⌘ J", action: "Toggle center column: Editor ↔ Terminal (WebSSH)"),
+            .init(keys: "⌘ J", action: "Toggle Editor ↔ Terminal (needs open project; gray when unavailable)"),
         ]),
     ]
 }

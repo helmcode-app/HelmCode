@@ -236,6 +236,28 @@ function parseControlMessage(text) {
   return null;
 }
 
+function wipeTerminalBuffer() {
+  try {
+    term.clear();
+    term.reset();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * End the shell session: no reconnect, clear scrollback, notify host.
+ * Used when the remote process exits (`exit`) or the project is closed.
+ */
+function endSession(reason = "exit") {
+  autoReconnect = false;
+  disconnect({ reconnect: false });
+  wipeTerminalBuffer();
+  // Tell the host first so UI leaves Terminal mode before a late "disconnected" status.
+  postToHost({ type: "sessionEnded", reason });
+  setStatus(reason === "exit" ? "exited" : "disconnected", "info");
+}
+
 function handleControlMessage(msg) {
   switch (msg.type) {
     case "ready":
@@ -246,8 +268,8 @@ function handleControlMessage(msg) {
       setStatus(msg.message || "error", "err");
       break;
     case "exit":
-      term.writeln("\r\n\x1b[90m[process exited]\x1b[0m\r\n");
-      setStatus("exited", "err");
+      // User typed `exit` (or shell ended) — leave shell mode and wipe history.
+      endSession("exit");
       break;
     case "pong":
     case "ping":
@@ -312,6 +334,9 @@ function disconnect(opts = { reconnect: false }) {
   }
 }
 
+/** Monotonic id so stale socket close/error handlers cannot clobber a newer session. */
+let connectGeneration = 0;
+
 function connect() {
   if (disposed) return;
   if (!baseURL) {
@@ -320,8 +345,11 @@ function connect() {
     return;
   }
 
-  disconnect({ reconnect: true });
+  // Close any prior socket *without* arming auto-reconnect (otherwise its
+  // `close` handler would schedule a second connect and thrash the status UI).
+  disconnect({ reconnect: false });
   autoReconnect = true;
+  const gen = ++connectGeneration;
 
   const { cols, rows } = fitAndNotify();
   let url;
@@ -339,14 +367,22 @@ function connect() {
   socket = ws;
 
   ws.addEventListener("open", () => {
+    if (gen !== connectGeneration || socket !== ws) return;
     setStatus("connected", "ok");
     fitAndNotify();
     startPing();
-    term.focus();
+    requestAnimationFrame(() => {
+      try {
+        term.focus();
+      } catch {
+        /* ignore */
+      }
+      postToHost({ type: "requestFocus" });
+    });
   });
 
   ws.addEventListener("message", (ev) => {
-    // Control JSON must never hit term.write (text or binary-labeled).
+    if (gen !== connectGeneration || socket !== ws) return;
     if (consumeControlPayload(ev.data)) return;
 
     if (typeof ev.data === "string") {
@@ -362,20 +398,22 @@ function connect() {
   });
 
   ws.addEventListener("close", (ev) => {
+    if (gen !== connectGeneration) return;
     stopPing();
-    socket = null;
+    if (socket === ws) socket = null;
     setStatus(`disconnected (${ev.code})`, "err");
     if (!disposed && autoReconnect) {
       term.writeln(
         "\r\n\x1b[90m[session closed — reconnecting in 2s]\x1b[0m\r\n"
       );
       setTimeout(() => {
-        if (!disposed && autoReconnect) connect();
+        if (!disposed && autoReconnect && gen === connectGeneration) connect();
       }, 2000);
     }
   });
 
   ws.addEventListener("error", () => {
+    if (gen !== connectGeneration || socket !== ws) return;
     setStatus("error", "err");
   });
 }
@@ -455,12 +493,27 @@ window.HelmTerminal = {
       connect();
     }
   },
+  /** Disconnect + wipe buffer (project switch / close). Does not dispose xterm. */
+  resetSession() {
+    disposed = false;
+    autoReconnect = false;
+    disconnect({ reconnect: false });
+    wipeTerminalBuffer();
+    setStatus("disconnected", "info");
+  },
   fit: fitAndNotify,
   focus() {
-    term.focus();
+    try {
+      term.focus();
+      // Ensure the hidden textarea used by xterm receives keys.
+      const ta = document.querySelector(".xterm-helper-textarea");
+      if (ta && typeof ta.focus === "function") ta.focus();
+    } catch {
+      /* ignore */
+    }
   },
   clear() {
-    term.clear();
+    wipeTerminalBuffer();
   },
   dispose() {
     disposed = true;

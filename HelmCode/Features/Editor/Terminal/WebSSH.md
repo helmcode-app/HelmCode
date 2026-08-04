@@ -2,6 +2,29 @@
 
 Full-column surface in the editor detail (exclusive with CodeMirror) — toggle with **⌘J**.
 
+## Module layout
+
+| File | Role |
+|------|------|
+| `TerminalPanelView` | Chrome bar, reconnect / hide, runner URL |
+| `TerminalHostView` | `UIViewRepresentable` shell |
+| `TerminalHostCoordinator` | WK bridge + connect state machine |
+| `TerminalWebContainer` | UIKit container; size → FitAddon |
+| `TerminalBundle` | Asset paths + JS snippets |
+| `TerminalLinkStatus` | ok / err / info for chrome |
+| `TerminalEndpoint` | Resolve project / engine base URL |
+| `terminal.html` + `terminal.bundle.js` | Offline xterm client |
+
+## Session policy
+
+| Rule | Behavior |
+|------|----------|
+| No open project | Terminal toggle disabled (gray) |
+| ⌘J hide / show | **Keeps** WebSocket + scrollback (panel mounted, opacity only) |
+| `exit` in shell | Ends PTY, clears history, returns to editor, bumps session epoch |
+| Switch / close project | Bumps epoch → wipe + disconnect; leave Terminal mode |
+| Connect dedupe | `lastAttemptToken` prevents thrashing `connect()` on every `updateUIView` |
+
 ## Wire protocol
 
 See `runner-core/docs/api/terminal.md`:
@@ -10,30 +33,18 @@ See `runner-core/docs/api/terminal.md`:
 |------|--------|
 | Endpoint | `ws(s)://<runner>/v1/terminal?cols=&rows=&token=` |
 | Binary frames | PTY stdin / stdout |
-| Text JSON | `{ type: "resize", cols, rows }` · `ping` / `pong` · `ready` · `error` · `exit` |
+| Text JSON | `resize` · `ping` / `pong` · `ready` · `error` · `exit` |
 
-`@xterm/addon-attach` is **not** used: the server mixes binary PTY data with JSON control frames. Attach is implemented manually in `terminal-entry.mjs`. Control JSON is never written to the PTY surface.
+Control JSON is never written to the PTY surface. `@xterm/addon-attach` is not used (mixed framing).
 
-## Resize (iPad keyboard / rotation)
+## Resize (iPad)
 
-1. `FitAddon.fit()` measures the `#terminal` DOM box (points → cell grid).
-2. Listeners: `window.resize`, `orientationchange`, `visualViewport`, `ResizeObserver`, plus Swift `TerminalWebContainer` bounds.
-3. After fit, client sends `{ type: "resize", cols: term.cols, rows: term.rows }`.
+1. `FitAddon.fit()` measures `#terminal` → `cols` / `rows`
+2. Listeners: window / visualViewport / ResizeObserver + Swift bounds
+3. Client sends `{ type: "resize", cols, rows }`
 
-## Rebuild bundle
+## Rebuild
 
 ```bash
 ./scripts/rebuild-terminal.sh
 ```
-
-Writes offline `terminal.bundle.js` (`@xterm/xterm` + fit + web-links + CSS).
-
-## Swift surface
-
-| Type | Role |
-|------|------|
-| `TerminalPanelView` | Chrome bar, reconnect / back to editor |
-| `TerminalHostView` | WKWebView bridge + connection state machine |
-| `TerminalWebContainer` | UIKit container; reports size changes |
-| `TerminalBundle` | Asset paths + JS snippets |
-| `TerminalLinkStatus` | ok / err / info for chrome status |

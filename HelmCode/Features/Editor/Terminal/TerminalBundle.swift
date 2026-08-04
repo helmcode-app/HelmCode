@@ -37,6 +37,8 @@ enum TerminalBundle {
     }
 
     static var disconnectJavaScript: String { call("disconnect") }
+    /// Drop socket + wipe scrollback (project switch / close).
+    static var resetSessionJavaScript: String { call("resetSession") }
     static var fitJavaScript: String { call("fit") }
     static var focusJavaScript: String { call("focus") }
     static var clearJavaScript: String { call("clear") }
