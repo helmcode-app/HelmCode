@@ -16,6 +16,21 @@ extension View {
             .tint(Color.accentColor)
     }
 
+    /// Form inline picker without an extra title row (e.g. Appearance System/Light/Dark).
+    /// Pair with `label: { EmptyView() }` on the `Picker`.
+    func helmTitlelessInlinePicker() -> some View {
+        labelsHidden()
+            .pickerStyle(.inline)
+    }
+
+    /// Inline navigation title on iOS; no-op title mode on other platforms.
+    func helmInlineNavigationTitle(_ title: String) -> some View {
+        navigationTitle(title)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+    }
+
     /// Leading toolbar close control (xmark) for sheets.
     func helmSheetCloseToolbar(disabled: Bool = false, action: @escaping () -> Void) -> some View {
         toolbar {

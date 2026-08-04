@@ -36,6 +36,10 @@ HelmCode/
 | **Features** | UI by product column (Sidebar / Editor / Commander / Settings) |
 | **Shared** | Cross-feature controls only (no business logic) |
 
+**Settings:** Appearance (titleless inline theme) · Layout · About (shortcuts + `AppBundleInfo`).  
+Sheets share `helmSheetCloseToolbar` / `helmInlineNavigationTitle`.  
+Column empty states: `FeatureEmptyPlaceholder` (icon) vs `SidebarEmptyPlaceholder` (text).
+
 **Dependency direction:** `App → Features → Core`, `Features → Shared`. Network does not own session; `WorkspaceSession` applies VFS trees.
 
 ### Shell layout

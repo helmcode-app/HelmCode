@@ -43,10 +43,7 @@ struct BrowseProjectsSheet: View {
                     )
                 }
             }
-            .navigationTitle("Projects")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .helmInlineNavigationTitle("Projects")
             .helmSheetCloseToolbar {
                 isPresented = false
             }

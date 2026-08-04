@@ -2,8 +2,8 @@
 //  EditorKeyboardShortcuts.swift
 //  HelmCode
 //
-//  Single source of truth for CodeMirror / editor shortcut help UI.
-//  Keep in sync with Features/Editor/CodeMirror/editor-entry.mjs (helmEditorKeymap).
+//  Catalog + Settings list for editor / panel shortcuts.
+//  Keep actions in sync with Features/Editor/CodeMirror/editor-entry.mjs where applicable.
 //
 
 import SwiftUI
@@ -34,8 +34,15 @@ struct EditorShortcutSection: Identifiable, Hashable, Sendable {
     }
 }
 
+// MARK: - Catalog
+
 enum EditorKeyboardShortcutsCatalog {
-    /// Settings → About → Keyboard Shortcuts.
+    /// Intro line on the shortcuts page (Settings → Keyboard Shortcuts).
+    static let intro = "Requires editor focus and a hardware keyboard."
+
+    /// Empty-state tip under the editor.
+    static let emptyStateTip = "Shortcuts in Settings"
+
     static let sections: [EditorShortcutSection] = [
         EditorShortcutSection(title: "Font Size", items: [
             .init(keys: "⌘ +  /  ⌘ =", action: "Larger font"),
@@ -65,27 +72,27 @@ enum EditorKeyboardShortcutsCatalog {
             .init(keys: "Gutter click", action: "Toggle bookmark on that line"),
         ]),
         EditorShortcutSection(title: "Find & Fold", items: [
-            .init(keys: "⌘ F", action: "Find (widget top-right; expand for replace)"),
-            .init(keys: "⌘ ⌥ F", action: "Find and Replace (expand replace row)"),
+            .init(keys: "⌘ F", action: "Find"),
+            .init(keys: "⌘ ⌥ F", action: "Find and Replace"),
             .init(keys: "⌘ G  /  ⌘ ⇧ G", action: "Find next / previous"),
             .init(keys: "Esc", action: "Close find panel"),
             .init(keys: "⌘ ⌥ [  /  ⌘ ⌥ ]", action: "Fold / unfold all"),
             .init(keys: "⌘ ⌥ .", action: "Toggle fold at cursor"),
         ]),
         EditorShortcutSection(title: "Panels", items: [
-            .init(keys: "⌘ J", action: "Toggle Editor ↔ Terminal (needs open project; gray when unavailable)"),
+            .init(keys: "⌘ J", action: "Toggle Terminal (project open)"),
         ]),
     ]
 }
 
-// MARK: - Reference page
+// MARK: - Settings page
 
-/// Pushed from Settings → About (not on the editor toolbar).
+/// Pushed from Settings → Keyboard Shortcuts.
 struct EditorKeyboardShortcutsView: View {
     var body: some View {
         List {
             Section {
-                Text("Active when the code editor is focused (hardware keyboard on iPad).")
+                Text(EditorKeyboardShortcutsCatalog.intro)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
@@ -94,25 +101,26 @@ struct EditorKeyboardShortcutsView: View {
             ForEach(EditorKeyboardShortcutsCatalog.sections) { section in
                 Section(section.title) {
                     ForEach(section.items) { item in
-                        LabeledContent {
-                            Text(item.action)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        } label: {
-                            Text(item.keys)
-                                .font(.body.monospaced())
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(item.action), \(item.keys)")
+                        shortcutRow(item)
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Keyboard Shortcuts")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .helmInlineNavigationTitle("Keyboard Shortcuts")
+    }
+
+    private func shortcutRow(_ item: EditorShortcut) -> some View {
+        LabeledContent {
+            Text(item.action)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        } label: {
+            Text(item.keys)
+                .font(.body.monospaced())
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.action), \(item.keys)")
     }
 }
 

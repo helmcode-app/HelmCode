@@ -43,10 +43,7 @@ struct OpenProjectSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Open Project")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .helmInlineNavigationTitle("Open Project")
             .helmSheetCloseToolbar(disabled: isConnecting) {
                 isPresented = false
             }

@@ -29,36 +29,9 @@ struct ProjectSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("Display name", text: $displayName)
-                        .disabled(isSaving)
-                } header: {
-                    Text("Name")
-                } footer: {
-                    Text("Leave empty to use the name from the runner / git remote.")
-                }
-
-                Section {
-                    TextField("http://127.0.0.1:18080", text: $runnerURL)
-                        .helmURLFieldStyle()
-                        .disabled(isSaving)
-                } header: {
-                    Text("Runner URL")
-                } footer: {
-                    Text("HTTP, VFS (/v1/vfs), and Agent (/v1/agent) share this host.")
-                }
-
-                Section {
-                    SecureField("Bearer token (optional)", text: $apiToken)
-                        .helmMonospacedFieldStyle()
-                        .disabled(isSaving)
-                        .textContentType(.password)
-                } header: {
-                    Text("API Token")
-                } footer: {
-                    Text("Required only when the runner sets OPENCORE_API_TOKEN.")
-                }
-
+                nameSection
+                runnerURLSection
+                tokenSection
                 if let errorMessage {
                     Section {
                         Text(errorMessage)
@@ -68,15 +41,11 @@ struct ProjectSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Project Settings")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .helmInlineNavigationTitle("Project Settings")
+            .helmSheetCloseToolbar(disabled: isSaving) {
+                isPresented = false
+            }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
-                        .disabled(isSaving)
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task { await save() }
@@ -85,17 +54,55 @@ struct ProjectSettingsSheet: View {
                     .disabled(!canSave || isSaving)
                 }
             }
-            .onAppear {
-                guard let project else {
-                    isPresented = false
-                    return
-                }
-                displayName = project.customName ?? ""
-                runnerURL = project.normalizedRunnerURL ?? project.runnerBaseURL ?? ""
-                apiToken = project.apiToken ?? ""
-            }
+            .onAppear(perform: loadFields)
             .interactiveDismissDisabled(isSaving)
         }
+    }
+
+    private var nameSection: some View {
+        Section {
+            TextField("Display name", text: $displayName)
+                .disabled(isSaving)
+        } header: {
+            Text("Name")
+        } footer: {
+            Text(Copy.nameFooter)
+        }
+    }
+
+    private var runnerURLSection: some View {
+        Section {
+            TextField("http://127.0.0.1:18080", text: $runnerURL)
+                .helmURLFieldStyle()
+                .disabled(isSaving)
+        } header: {
+            Text("Runner URL")
+        } footer: {
+            Text(Copy.runnerFooter)
+        }
+    }
+
+    private var tokenSection: some View {
+        Section {
+            SecureField("Bearer token (optional)", text: $apiToken)
+                .helmMonospacedFieldStyle()
+                .disabled(isSaving)
+                .textContentType(.password)
+        } header: {
+            Text("API Token")
+        } footer: {
+            Text(Copy.tokenFooter)
+        }
+    }
+
+    private func loadFields() {
+        guard let project else {
+            isPresented = false
+            return
+        }
+        displayName = project.customName ?? ""
+        runnerURL = project.normalizedRunnerURL ?? project.runnerBaseURL ?? ""
+        apiToken = project.apiToken ?? ""
     }
 
     private var canSave: Bool {
@@ -139,5 +146,11 @@ struct ProjectSettingsSheet: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private enum Copy {
+        static let nameFooter = "Leave empty to use the name from the runner / git remote."
+        static let runnerFooter = "HTTP, VFS (/v1/vfs), and Agent (/v1/agent) share this host."
+        static let tokenFooter = "Required only when the runner sets OPENCORE_API_TOKEN."
     }
 }

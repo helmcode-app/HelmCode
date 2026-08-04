@@ -2,8 +2,8 @@
 //  SettingsView.swift
 //  HelmCode
 //
-//  Sheet: appearance, layout, about (+ keyboard shortcuts).
-//  Runner URL / token live on Open Project (project-scoped), not here.
+//  App settings sheet: Appearance, Layout, About.
+//  Runner connection is project-scoped (Open Project / Project Settings).
 //
 
 import SwiftUI
@@ -14,8 +14,6 @@ struct SettingsView: View {
     @AppStorage(AppStorageKey.appearance) private var appearanceRaw = AppearancePreference.system.rawValue
     @AppStorage(AppStorageKey.showSidebar) private var showSidebar = true
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
-    @AppStorage(AppStorageKey.sidebarWidth) private var sidebarWidth = LayoutMetrics.defaultSidebarWidth
-    @AppStorage(AppStorageKey.commanderWidth) private var commanderWidth = LayoutMetrics.defaultCommanderWidth
 
     var body: some View {
         Form {
@@ -24,32 +22,33 @@ struct SettingsView: View {
             aboutSection
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .helmInlineNavigationTitle("Settings")
         .helmSheetCloseToolbar {
             dismiss()
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Appearance
 
     private var appearanceSection: some View {
         Section {
-            Picker("Theme", selection: $appearanceRaw) {
+            Picker(selection: $appearanceRaw) {
                 ForEach(AppearancePreference.allCases) { mode in
                     Label(mode.title, systemImage: mode.systemImage)
                         .tag(mode.rawValue)
                 }
+            } label: {
+                EmptyView()
             }
-            .pickerStyle(.inline)
+            .helmTitlelessInlinePicker()
         } header: {
             Text("Appearance")
         } footer: {
-            Text("System follows the iPad light/dark setting.")
+            Text(Copy.appearanceFooter)
         }
     }
+
+    // MARK: - Layout
 
     private var layoutSection: some View {
         Section {
@@ -59,16 +58,14 @@ struct SettingsView: View {
             Toggle(isOn: $showCommander) {
                 Label("Commander", systemImage: "sidebar.right")
             }
-            Button("Reset Column Widths") {
-                sidebarWidth = LayoutMetrics.defaultSidebarWidth
-                commanderWidth = LayoutMetrics.defaultCommanderWidth
-            }
         } header: {
-            Text("Workspace Layout")
+            Text("Layout")
         } footer: {
-            Text("Sidebar and Commander use system NavigationSplitView / inspector chrome. Drag system dividers to resize.")
+            Text(Copy.layoutFooter)
         }
     }
+
+    // MARK: - About
 
     private var aboutSection: some View {
         Section {
@@ -77,16 +74,22 @@ struct SettingsView: View {
             } label: {
                 Label("Keyboard Shortcuts", systemImage: "keyboard")
             }
-            LabeledContent("App", value: "HelmCode")
-            LabeledContent("Bundle", value: Bundle.main.bundleIdentifier ?? "—")
-            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+
+            LabeledContent("App", value: AppBundleInfo.displayName)
+            LabeledContent("Bundle", value: AppBundleInfo.bundleIdentifier)
+            if let version = AppBundleInfo.shortVersion {
                 LabeledContent("Version", value: version)
             }
         } header: {
             Text("About")
-        } footer: {
-            Text("Self-hosted runner URL and optional API token are set when you Open Project. Editor shortcuts need focus in the code pane and a hardware keyboard.")
         }
+    }
+
+    // MARK: - Copy
+
+    private enum Copy {
+        static let appearanceFooter = "System follows the iPad light and dark mode."
+        static let layoutFooter = "Drag system dividers to resize columns. Use ⌘J for Terminal when a project is open."
     }
 }
 

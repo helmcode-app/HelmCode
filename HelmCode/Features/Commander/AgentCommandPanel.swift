@@ -66,27 +66,11 @@ struct AgentCommandPanel: View {
         VStack(spacing: 0) {
             headerBar(showActions: false)
             Divider().opacity(0.5)
-
-            VStack(spacing: 14) {
-                Spacer(minLength: 24)
-                Image(systemName: "bolt.horizontal.circle")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.tertiary)
-                Text("Open a project to use the agent")
-                    .font(.headline)
-                Text(
-                    """
-                    The headless agent uses the same runner as the open project \
-                    (HTTP + VFS + `ws://…/v1/agent`). There is no separate Agent backend.
-                    """
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 28)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            FeatureEmptyPlaceholder(
+                systemImage: "bolt.horizontal.circle",
+                title: Copy.unavailableTitle,
+                subtitle: Copy.unavailableSubtitle
+            )
         }
     }
 
@@ -209,6 +193,11 @@ struct AgentCommandPanel: View {
            !branch.isEmpty {
             agent.baseBranch = branch
         }
+    }
+
+    private enum Copy {
+        static let unavailableTitle = "Open a project to use the agent"
+        static let unavailableSubtitle = "Open a project first, then chat with the agent here."
     }
 }
 

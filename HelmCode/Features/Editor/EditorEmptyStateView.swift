@@ -120,7 +120,7 @@ struct EditorEmptyStateView: View {
     private var tipsBar: some View {
         HStack(spacing: 16) {
             Label("Browse files in the sidebar", systemImage: "sidebar.left")
-            Label("Shortcuts in Settings → About", systemImage: "keyboard")
+            Label(EditorKeyboardShortcutsCatalog.emptyStateTip, systemImage: "keyboard")
         }
         .font(.caption)
         .foregroundStyle(.tertiary)
