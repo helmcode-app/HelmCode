@@ -274,8 +274,10 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
             }
 
         case "sessionEnded":
+            // Mark PTY dead but keep lastAttemptToken: the panel may still report
+            // isVisible until the parent applies hide + epoch. Clearing the token
+            // here would let the same update cycle reconnect immediately.
             markSessionDead()
-            lastAttemptToken = nil
             let reason = body["reason"] as? String ?? "exit"
             parent.onStatus?("exited", .info)
             parent.onSessionEnded?(reason)

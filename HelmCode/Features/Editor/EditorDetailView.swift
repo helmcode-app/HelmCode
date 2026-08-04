@@ -40,7 +40,9 @@ struct EditorDetailView: View {
                 handleProjectChange(from: oldID, to: newID)
             }
             .onAppear {
-                if !canUseTerminal, showTerminal { showTerminal = false }
+                if !canUseTerminal, showTerminal {
+                    applyTerminalVisibility(false)
+                }
             }
     }
 
@@ -175,27 +177,45 @@ struct EditorDetailView: View {
 
     private func toggleTerminal() {
         guard canUseTerminal else { return }
-        if showingTerminal { hideTerminal() } else { openTerminal() }
+        // Key commands can see a stale @AppStorage snapshot after WK bridge writes.
+        if TerminalVisibilityStore.isShown {
+            hideTerminal()
+        } else {
+            openTerminal()
+        }
     }
 
     private func openTerminal() {
         guard canUseTerminal else { return }
-        withAnimation(LayoutMetrics.panelSlideAnimation) { showTerminal = true }
+        withAnimation(LayoutMetrics.panelSlideAnimation) {
+            applyTerminalVisibility(true)
+        }
     }
 
     private func hideTerminal() {
-        withAnimation(LayoutMetrics.panelSlideAnimation) { showTerminal = false }
+        withAnimation(LayoutMetrics.panelSlideAnimation) {
+            applyTerminalVisibility(false)
+        }
+    }
+
+    /// Keep `@AppStorage` and UserDefaults in lockstep (see TerminalVisibilityStore).
+    private func applyTerminalVisibility(_ shown: Bool) {
+        TerminalVisibilityStore.setShown(shown)
+        showTerminal = shown
     }
 
     /// Remote shell `exit`: leave Terminal UI and invalidate keep-alive.
     private func handleShellExit() {
-        hideTerminal()
+        // Persist first so the next ⌘J never toggles a phantom “open” session.
+        applyTerminalVisibility(false)
         terminalSessionEpoch &+= 1
     }
 
     private func handleProjectChange(from oldID: String?, to newID: String?) {
         guard oldID != newID else { return }
         terminalSessionEpoch &+= 1
-        if showTerminal { hideTerminal() }
+        if showTerminal || TerminalVisibilityStore.isShown {
+            hideTerminal()
+        }
     }
 }
