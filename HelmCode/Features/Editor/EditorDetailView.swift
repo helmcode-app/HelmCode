@@ -2,8 +2,8 @@
 //  EditorDetailView.swift
 //  HelmCode
 //
-//  NavigationSplitView detail: welcome → empty project → CodeMirror.
-//  Project switcher sits in the leading toolbar, left of the file name.
+//  NavigationSplitView detail: welcome → empty project → CodeMirror, or full-column Terminal.
+//  Top toolbar (⌘J) toggles exclusive Code ↔ Terminal in the center column.
 //
 
 import SwiftUI
@@ -17,25 +17,48 @@ struct EditorDetailView: View {
     var onOpenSettings: (() -> Void)?
 
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
+    @AppStorage(AppStorageKey.showTerminal) private var showTerminal = false
 
     var body: some View {
-        surfaceContent
+        centerColumn
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(LayoutMetrics.panelSlideAnimation, value: showTerminal)
             .navigationTitle("")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            // Sidebar hosts the only system sidebarToggle (+ global VFS status).
             .toolbar(removing: .sidebarToggle)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    leadingToolbar
-                }
-                .sharedBackgroundVisibility(.hidden)
+            .toolbar { detailToolbar }
+            .background { terminalKeyboardShortcut }
+    }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    InspectorToggleButton(isExpanded: showCommander, action: toggleCommander)
+    // MARK: - Center column (editor XOR terminal)
+
+    @ViewBuilder
+    private var centerColumn: some View {
+        if showTerminal {
+            TerminalPanelView(
+                engine: engine,
+                isPresented: terminalPresented
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.opacity)
+        } else {
+            surfaceContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+        }
+    }
+
+    private var terminalPresented: Binding<Bool> {
+        Binding(
+            get: { showTerminal },
+            set: { newValue in
+                withAnimation(LayoutMetrics.panelSlideAnimation) {
+                    showTerminal = newValue
                 }
             }
+        )
     }
 
     // MARK: - Surfaces
@@ -65,6 +88,47 @@ struct EditorDetailView: View {
         }
     }
 
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            leadingToolbar
+        }
+        .sharedBackgroundVisibility(.hidden)
+
+        ToolbarItem(placement: .topBarTrailing) {
+            // HStack so Divider is vertical; ToolbarItemGroup can stack and turn it into a hairline.
+            HStack(spacing: 10) {
+                terminalToggleButton
+                Divider()
+                    .frame(height: 16)
+                InspectorToggleButton(isExpanded: showCommander, action: toggleCommander)
+            }
+        }
+    }
+
+    private var terminalToggleButton: some View {
+        Button(action: toggleTerminal) {
+            // Destination icon: Code when on Terminal, Terminal when on editor.
+            Image(systemName: showTerminal
+                ? "chevron.left.forwardslash.chevron.right"
+                : "terminal")
+        }
+        .accessibilityLabel(showTerminal ? "Show Editor" : "Show Terminal")
+        .help(showTerminal ? "Show Editor (⌘J)" : "Show Terminal (⌘J)")
+        .keyboardShortcut("j", modifiers: .command)
+    }
+
+    /// Global ⌘J even when the toolbar button is not the focus target.
+    private var terminalKeyboardShortcut: some View {
+        Button("", action: toggleTerminal)
+            .keyboardShortcut("j", modifiers: .command)
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+    }
+
     @ViewBuilder
     private var leadingToolbar: some View {
         switch session.editorSurface {
@@ -85,6 +149,12 @@ struct EditorDetailView: View {
     private func toggleCommander() {
         withAnimation(LayoutMetrics.panelSlideAnimation) {
             showCommander.toggle()
+        }
+    }
+
+    private func toggleTerminal() {
+        withAnimation(LayoutMetrics.panelSlideAnimation) {
+            showTerminal.toggle()
         }
     }
 }

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>HelmCode Terminal</title>
+    <style>
+      /* Defaults track systemBackground until Swift setColorScheme runs. */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1c1c1e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000000;
+          --fg: #e5e5ea;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+        /* Avoid iOS rubber-band revealing empty area under the grid. */
+        overscroll-behavior: none;
+        position: fixed;
+        inset: 0;
+      }
+      #terminal {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        /* Horizontal only — vertical padding eats a partial row and FitAddon
+           occasionally over-commits, clipping the last line under the chrome. */
+        padding: 0 6px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .xterm {
+        height: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+      }
+      .xterm-viewport {
+        overflow-y: auto !important;
+        background-color: var(--bg) !important;
+      }
+      .xterm-screen {
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      /* Keep helper/accessibility text from expanding the layout box. */
+      .xterm-helpers {
+        position: absolute !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal" aria-label="Terminal"></div>
+    <script src="terminal.bundle.js"></script>
+  </body>
+</html>

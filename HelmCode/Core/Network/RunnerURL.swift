@@ -24,6 +24,15 @@ enum RunnerURL {
         return trimmed
     }
 
+    /// Normalized HTTP base, or `fallback` when empty / invalid.
+    static func httpBase(from raw: String, fallback: String) -> String {
+        let normalized = normalizeHTTP(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        if !normalized.isEmpty, isValid(normalized) {
+            return normalizeHTTP(normalized)
+        }
+        return normalizeHTTP(fallback)
+    }
+
     /// Absolute `GET …/health` URL for a runner base string.
     static func healthURL(fromBase raw: String) -> URL? {
         let http = normalizeHTTP(raw)
@@ -51,6 +60,31 @@ enum RunnerURL {
     /// Build `ws(s)://host/…/v1/agent` for JSON-RPC `agent/run` orchestration.
     static func webSocketAgentURL(fromBase baseURLString: String) -> URL? {
         webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/agent")
+    }
+
+    /// Build `ws(s)://host/…/v1/terminal` for WebSSH (xterm.js / Docker exec TTY).
+    static func webSocketTerminalURL(
+        fromBase baseURLString: String,
+        cols: Int = 80,
+        rows: Int = 24,
+        token: String? = nil
+    ) -> URL? {
+        guard let base = webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/terminal"),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        var items = [
+            URLQueryItem(name: "cols", value: String(max(1, cols))),
+            URLQueryItem(name: "rows", value: String(max(1, rows))),
+        ]
+        if let token {
+            let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty {
+                items.append(URLQueryItem(name: "token", value: t))
+            }
+        }
+        components.queryItems = items
+        return components.url
     }
 
     private static func webSocketURL(fromBase baseURLString: String, pathSuffix: String) -> URL? {

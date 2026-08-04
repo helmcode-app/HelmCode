@@ -30,6 +30,8 @@ enum AppStorageKey {
     static let lastRunnerURL = "helm.runner.lastURL"
     /// Optional Bearer for open-core (`OPENCORE_API_TOKEN`); applied when opening / reactivating projects.
     static let runnerAPIToken = "helm.runner.apiToken"
+    /// Center column shows Terminal instead of the code editor when true.
+    static let showTerminal = "helm.column.showTerminal"
 }
 
 // MARK: - Last self-hosted runner (Open Project)

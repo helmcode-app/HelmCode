@@ -22,6 +22,7 @@ HelmCode/
 │   ├── Editor/
 │   │   ├── Welcome/          # start page, Open Project, project settings
 │   │   ├── CodeMirror/       # CM6 host (Swift + offline web assets)
+│   │   ├── Terminal/         # WebSSH xterm.js full-column panel (⌘J)
 │   │   └── Editor*.swift     # detail routing, canvas, empty, switcher
 │   ├── Commander/            # AgentCommandPanel + timeline + prompt tags
 │   └── Settings/             # appearance / layout / shortcuts
@@ -42,7 +43,7 @@ HelmCode/
 | Column | Mechanism |
 |--------|-----------|
 | Sidebar (leading) | `NavigationSplitView` system sidebar |
-| Editor (center) | Detail: welcome → empty project → CodeMirror |
+| Editor (center) | Detail: welcome → empty project → CodeMirror **or** full-column Terminal (⌘J) |
 | Commander (trailing) | System `.inspector` column |
 
 ### Editor detail surfaces
@@ -114,6 +115,7 @@ Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see ru
 | `POST /v1/tasks/:id/cancel` | Cancel |
 | `WS /v1/agent` | **Agent command panel** — `agent/run` + progress stream |
 | `WS /v1/vfs` | Workspace tree / chunked read / write |
+| `WS /v1/terminal` | **WebSSH** — xterm.js PTY (Docker exec); enable `TERMINAL_ENABLED` |
 
 ### Agent Commander (inspector)
 
