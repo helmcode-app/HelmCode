@@ -78,6 +78,19 @@ enum LayoutMetrics {
     /// Horizontal inset around the CodeMirror host in the editor column.
     static let editorHorizontalInset: CGFloat = 4
 
+    /// Center-column trailing toolbar: Terminal | divider | Inspector.
+    enum DetailTrailingToolbar {
+        /// Space between Terminal, divider, and Inspector icons.
+        static let itemSpacing: CGFloat = 8
+        /// Extra space before the Terminal icon (inside the trailing item group).
+        static let leadingInset: CGFloat = 2
+        /// Divider height between the two toolbar icons.
+        static let dividerHeight: CGFloat = 16
+    }
+
+    /// Project switcher ↔ file name in the leading toolbar.
+    static let detailLeadingToolbarSpacing: CGFloat = 10
+
     /// Matches NavigationSplitView sidebar show/hide feel (commander inspector slide).
     static var panelSlideAnimation: Animation {
         .smooth(duration: 0.32, extraBounce: 0)

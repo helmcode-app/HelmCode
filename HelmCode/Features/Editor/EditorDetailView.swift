@@ -114,12 +114,20 @@ struct EditorDetailView: View {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(placement: .topBarTrailing) {
-            HStack(spacing: 10) {
-                terminalToggleButton
-                Divider().frame(height: 16)
-                InspectorToggleButton(isExpanded: showCommander, action: toggleCommander)
-            }
+            trailingToolbar
         }
+    }
+
+    /// Terminal | divider | Inspector.
+    /// System nav bar still adds its own trailing inset after the last icon.
+    private var trailingToolbar: some View {
+        HStack(spacing: LayoutMetrics.DetailTrailingToolbar.itemSpacing) {
+            terminalToggleButton
+            Divider()
+                .frame(height: LayoutMetrics.DetailTrailingToolbar.dividerHeight)
+            InspectorToggleButton(isExpanded: showCommander, action: toggleCommander)
+        }
+        .padding(.leading, LayoutMetrics.DetailTrailingToolbar.leadingInset)
     }
 
     private var terminalToggleButton: some View {
@@ -130,16 +138,22 @@ struct EditorDetailView: View {
         }
         .disabled(!canUseTerminal)
         .foregroundStyle(canUseTerminal ? Color.primary : Color.secondary.opacity(0.45))
-        .accessibilityLabel(
-            canUseTerminal
-                ? (showingTerminal ? "Show Editor" : "Show Terminal")
-                : "Terminal unavailable — open a project"
-        )
-        .help(
-            canUseTerminal
-                ? (showingTerminal ? "Show Editor (⌘J)" : "Show Terminal (⌘J)")
-                : "Open a project to use the terminal"
-        )
+        .accessibilityLabel(terminalAccessibilityLabel)
+        .help(terminalHelp)
+    }
+
+    private var terminalAccessibilityLabel: String {
+        guard canUseTerminal else {
+            return "Terminal unavailable — open a project"
+        }
+        return showingTerminal ? "Show Editor" : "Show Terminal"
+    }
+
+    private var terminalHelp: String {
+        guard canUseTerminal else {
+            return "Open a project to use the terminal"
+        }
+        return showingTerminal ? "Show Editor (⌘J)" : "Show Terminal (⌘J)"
     }
 
     /// Sole ⌘J registration (not also on the toolbar button).
@@ -160,7 +174,7 @@ struct EditorDetailView: View {
         case .emptyProject:
             EditorProjectSwitcher(session: session)
         case .editing(_, let file):
-            HStack(spacing: 10) {
+            HStack(spacing: LayoutMetrics.detailLeadingToolbarSpacing) {
                 EditorProjectSwitcher(session: session)
                 PlainToolbarLabel(title: file.name)
             }
