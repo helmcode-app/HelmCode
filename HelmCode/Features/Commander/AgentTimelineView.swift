@@ -2,8 +2,8 @@
 //  AgentTimelineView.swift
 //  HelmCode
 //
-//  DevOps-style real-time streaming timeline bound to AgentNetworkEngine.eventLog.
-//  Row / badge / result card: AgentTimelineNodes.swift
+//  Cursor-style chat transcript: user bubbles + grouped agent turn cards.
+//  Restore checkpoint only on user messages.
 //
 
 import SwiftUI
@@ -13,127 +13,150 @@ import UIKit
 
 struct AgentTimelineView: View {
     @ObservedObject var agent: AgentNetworkEngine
+    @State private var confirmRevertId: String?
+
+    private var transcript: [AgentTranscriptItem] {
+        AgentTranscriptItem.build(from: agent.eventLog)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if agent.eventLog.isEmpty {
+                    if transcript.isEmpty {
                         emptyState
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    } else {
-                        ForEach(Array(agent.eventLog.enumerated()), id: \.element.id) { index, entry in
-                            AgentTimelineNode(
-                                entry: entry,
-                                isLast: index == agent.eventLog.count - 1
-                            )
-                            .id(entry.id)
-                            .transition(
-                                .asymmetric(
-                                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                                    removal: .opacity
-                                )
-                            )
-                        }
-                    }
-
-                    if agent.phase.isProcessingLayout {
-                        processingFooter
-                            .id("processing-footer")
-                            .padding(.top, 10)
                             .transition(.opacity)
-                    }
-
-                    if let result = agent.result {
-                        AgentResultCard(result: result)
-                            .id("result-banner")
-                            .padding(.top, 10)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        ForEach(transcript) { item in
+                            switch item {
+                            case .user(let entry):
+                                AgentUserBubble(
+                                    entry: entry,
+                                    onRevert: userMessageId(for: entry).map { mid in
+                                        { confirmRevertId = mid }
+                                    }
+                                )
+                                .id(item.id)
+                            case .agentTurn(_, let parts):
+                                AgentTurnCard(parts: parts)
+                                    .id(item.id)
+                            }
+                        }
                     }
 
                     if let err = agent.lastError, agent.result == nil, !agent.phase.isBusy {
                         errorBanner(err)
                             .id("error-banner")
                     }
+
+                    if agent.phase == .succeeded {
+                        doneFooter
+                            .id("done-footer")
+                    }
+
+                    Color.clear.frame(height: 8).id("chat-bottom")
                 }
-                .padding(.vertical, 10)
-                .animation(.spring(response: 0.38, dampingFraction: 0.86), value: agent.eventLog.count)
-                .animation(.easeOut(duration: 0.22), value: agent.phase.label)
+                .padding(.vertical, 8)
+                .animation(.easeOut(duration: 0.2), value: agent.eventLog.count)
+                .animation(.easeOut(duration: 0.2), value: agent.phase.label)
             }
-            // Bottom safe area comes from the composer dock (`safeAreaInset` on the panel).
             .scrollIndicators(.automatic)
             .onChange(of: agent.eventLog.count) { _, _ in
-                scrollToLatest(proxy: proxy)
+                scrollToBottom(proxy: proxy)
             }
-            .onChange(of: agent.result?.taskId) { _, _ in
-                withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo("result-banner", anchor: .bottom)
+            .onChange(of: agent.eventLog.last?.message) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: agent.phase.label) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .confirmationDialog(
+                "Restore checkpoint?",
+                isPresented: Binding(
+                    get: { confirmRevertId != nil },
+                    set: { if !$0 { confirmRevertId = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Restore", role: .destructive) {
+                    if let mid = confirmRevertId {
+                        Task { await agent.revertToMessage(messageId: mid) }
+                    }
+                    confirmRevertId = nil
                 }
+                Button("Cancel", role: .cancel) {
+                    confirmRevertId = nil
+                }
+            } message: {
+                Text("Removes this message and everything after, undoes file changes, and puts the text back in the input. You can undo the restore once.")
             }
         }
     }
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1.5)
-                    .frame(width: 56, height: 56)
-                Image(systemName: "waveform.path.ecg")
-                    .font(.title)
-                    .foregroundStyle(.tertiary)
-            }
-            Text("Agent timeline")
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("Start a conversation")
                 .font(.headline)
-            Text("Launch a headless agent to stream provisioning, tests, self-healing, and push events into this console.")
+            Text("Ask a question, plan a change, or let the agent edit the project — like Cursor chat.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 48)
+        .padding(.vertical, 56)
     }
 
-    private var processingFooter: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Agent processing…")
-                    .font(.caption.weight(.semibold))
-                Text(agent.pollStatus?.displayName ?? agent.phase.label)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+    private var doneFooter: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text("Done")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
             Spacer(minLength: 0)
+            if agent.canUnrevert {
+                Button("Undo restore") {
+                    Task { await agent.unrevertLast() }
+                }
+                .font(.caption.weight(.semibold))
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.accentColor.opacity(0.08))
+        .padding(.vertical, 8)
     }
 
     private func errorBanner(_ message: String) -> some View {
         Text(message)
-            .font(.system(.caption, design: .monospaced))
+            .font(.caption)
             .foregroundStyle(.red)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(Color.red.opacity(0.08))
+            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 12)
     }
 
-    private func scrollToLatest(proxy: ScrollViewProxy) {
-        guard let last = agent.eventLog.last else { return }
-        withAnimation(.easeOut(duration: 0.22)) {
-            proxy.scrollTo(last.id, anchor: .bottom)
+    /// Restore only for user-authored messages with a real OpenCode id.
+    private func userMessageId(for entry: EventLog) -> String? {
+        guard entry.stage == .userCommand else { return nil }
+        guard let mid = entry.detail?["timelineId"]?.stringValue, mid.hasPrefix("msg") else {
+            return nil
+        }
+        return mid
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo("chat-bottom", anchor: .bottom)
         }
     }
 }
 
 #Preview {
-    let agent = AgentNetworkEngine()
-    return AgentTimelineView(agent: agent)
+    AgentTimelineView(agent: AgentNetworkEngine())
         .frame(width: 360, height: 640)
 }

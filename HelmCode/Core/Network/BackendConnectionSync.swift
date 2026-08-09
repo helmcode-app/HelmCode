@@ -2,7 +2,7 @@
 //  BackendConnectionSync.swift
 //  HelmCode
 //
-//  Keep HTTP task engine + VFS tunnel + Agent WebSocket on the same base URL / token.
+//  Keep HTTP engine + VFS tunnel + Agent sessions client on the same base URL / token.
 //
 
 import Foundation
@@ -15,7 +15,7 @@ enum BackendConnectionSync {
         vfs.apiToken = engine.apiToken
     }
 
-    /// Copy HTTP engine credentials onto the Agent WebSocket engine (no auto-start).
+    /// Copy HTTP engine credentials onto the Agent sessions client (no auto-start).
     static func syncAgent(from engine: HelmCodeNetworkEngine, to agent: AgentNetworkEngine) {
         agent.syncCredentials(from: engine)
     }

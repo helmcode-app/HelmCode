@@ -128,7 +128,7 @@ struct OpenProjectSheet: View {
             } header: {
                 Text("Runner URL")
             } footer: {
-                Text("Docker compose publishes host port 18080 → container 8080. Same host serves HTTP, VFS (/v1/vfs), and Agent (/v1/agent).")
+                Text("Docker compose publishes host port 18080 → container 8080. Same host serves HTTP, VFS (/v1/vfs), and Agent sessions (/v1/sessions).")
             }
 
             Section {

@@ -10,27 +10,14 @@ import SwiftUI
 enum AgentPromptEditing {
     /// Insert `piece` at the caret (or replace the current selection).
     /// Returns the updated text and a selection with the caret after the insert.
+    /// Pads with spaces around file tags so `@path` stays tokenized.
     static func insert(
         _ insertion: String,
         into text: String,
         selection: TextSelection?
     ) -> (text: String, selection: TextSelection) {
         var result = text
-        let end = result.endIndex
-
-        let replaceRange: Range<String.Index>
-        if let selection {
-            switch selection.indices {
-            case .selection(let range):
-                replaceRange = range
-            case .multiSelection(let ranges):
-                replaceRange = ranges.ranges.first ?? end..<end
-            @unknown default:
-                replaceRange = end..<end
-            }
-        } else {
-            replaceRange = end..<end
-        }
+        let replaceRange = replacementRange(in: result, selection: selection)
 
         var piece = insertion
         if replaceRange.lowerBound > result.startIndex {
@@ -51,11 +38,46 @@ enum AgentPromptEditing {
             }
         }
 
-        result.replaceSubrange(replaceRange, with: piece)
+        return apply(piece, to: result, range: replaceRange)
+    }
 
+    /// Insert without surrounding spaces (newlines, raw snippets).
+    static func insertRaw(
+        _ insertion: String,
+        into text: String,
+        selection: TextSelection?
+    ) -> (text: String, selection: TextSelection) {
+        var result = text
+        let replaceRange = replacementRange(in: result, selection: selection)
+        return apply(insertion, to: result, range: replaceRange)
+    }
+
+    private static func replacementRange(
+        in text: String,
+        selection: TextSelection?
+    ) -> Range<String.Index> {
+        let end = text.endIndex
+        guard let selection else { return end..<end }
+        switch selection.indices {
+        case .selection(let range):
+            return range
+        case .multiSelection(let ranges):
+            return ranges.ranges.first ?? end..<end
+        @unknown default:
+            return end..<end
+        }
+    }
+
+    private static func apply(
+        _ piece: String,
+        to text: String,
+        range: Range<String.Index>
+    ) -> (text: String, selection: TextSelection) {
+        var result = text
+        result.replaceSubrange(range, with: piece)
         let caret: String.Index
         if let newEnd = result.index(
-            replaceRange.lowerBound,
+            range.lowerBound,
             offsetBy: piece.count,
             limitedBy: result.endIndex
         ) {

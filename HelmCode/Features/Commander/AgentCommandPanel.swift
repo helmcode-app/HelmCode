@@ -2,8 +2,7 @@
 //  AgentCommandPanel.swift
 //  HelmCode
 //
-//  Project-scoped agent command drawer shell:
-//  timeline + safe-area composer dock. Composer UI: AgentCommandComposer.
+//  Cursor-style agent chat: session switcher + transcript + composer.
 //
 
 import SwiftUI
@@ -19,6 +18,7 @@ struct AgentCommandPanel: View {
     @FocusState private var promptFocused: Bool
     @State private var isLaunching = false
     @State private var promptSelection: TextSelection?
+    @State private var showSessionPicker = false
 
     private var projectRunnerReady: Bool {
         session.selectedProject?.normalizedRunnerURL != nil
@@ -58,6 +58,9 @@ struct AgentCommandPanel: View {
         .onChange(of: session.selectedFileID) { _, _ in
             seedBranchFromProject()
         }
+        .sheet(isPresented: $showSessionPicker) {
+            AgentSessionPickerSheet(agent: agent)
+        }
     }
 
     // MARK: - No project
@@ -67,7 +70,7 @@ struct AgentCommandPanel: View {
             headerBar(showActions: false)
             Divider().opacity(0.5)
             FeatureEmptyPlaceholder(
-                systemImage: "bolt.horizontal.circle",
+                systemImage: "bubble.left.and.bubble.right",
                 title: Copy.unavailableTitle,
                 subtitle: Copy.unavailableSubtitle
             )
@@ -76,11 +79,10 @@ struct AgentCommandPanel: View {
 
     // MARK: - Project open
 
-    /// Timeline fills the column; composer sits in a bottom safe-area inset so the
-    /// session/timeline scroll view always reserves space and never scrolls under it.
     private var activeWorkspaceBody: some View {
         VStack(spacing: 0) {
             headerBar(showActions: true)
+            Divider().opacity(0.35)
             AgentTimelineView(agent: agent)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -112,16 +114,45 @@ struct AgentCommandPanel: View {
         .padding(.bottom, 10)
     }
 
-    // MARK: - Header
+    // MARK: - Header (Cursor-like)
 
     private func headerBar(showActions: Bool) -> some View {
-        HStack(spacing: 10) {
-            Text("Agent Command")
-                .font(.subheadline.weight(.semibold))
-            Spacer(minLength: 0)
-
+        HStack(spacing: 8) {
             if showActions {
+                Button {
+                    showSessionPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.left.and.text.bubble.right")
+                            .font(.caption.weight(.semibold))
+                        Text(headerTitle)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!agent.socketState.isReady)
+
+                Spacer(minLength: 4)
+
                 phaseChip
+
+                if agent.canUnrevert, !agent.phase.isBusy {
+                    Button {
+                        Task { await agent.unrevertLast() }
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Undo restore")
+                    .help("Undo last checkpoint restore")
+                }
+
                 if agent.phase.isBusy {
                     Button {
                         Task { await agent.cancelActiveTask() }
@@ -132,19 +163,23 @@ struct AgentCommandPanel: View {
                             .foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Cancel agent")
-                } else if agent.result != nil || !agent.eventLog.isEmpty {
+                    .accessibilityLabel("Stop")
+                } else {
                     Button {
-                        agent.resetSession()
+                        Task { await agent.startNewChat() }
                     } label: {
-                        Image(systemName: "arrow.counterclockwise")
+                        Image(systemName: "square.and.pencil")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear timeline")
+                    .accessibilityLabel("New chat")
+                    .disabled(!agent.socketState.isReady)
                 }
             } else {
+                Text("Agent")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
                 Text("UNAVAILABLE")
                     .font(.caption2.weight(.bold))
                     .tracking(0.5)
@@ -157,6 +192,12 @@ struct AgentCommandPanel: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color(.secondarySystemBackground).opacity(0.55))
+    }
+
+    private var headerTitle: String {
+        if let t = agent.sessionTitle, !t.isEmpty { return t }
+        if agent.activeSessionID != nil { return "Chat" }
+        return "Agent"
     }
 
     private var phaseChip: some View {
@@ -182,6 +223,7 @@ struct AgentCommandPanel: View {
             _ = try await agent.launchHeadlessAgent()
             promptSelection = nil
             promptFocused = false
+            await agent.refreshSessionList()
         } catch {
             // phase / lastError already set on the engine — keep prompt for retry.
         }
@@ -196,15 +238,14 @@ struct AgentCommandPanel: View {
     }
 
     private enum Copy {
-        static let unavailableTitle = "Open a project to use the agent"
-        static let unavailableSubtitle = "Open a project first, then chat with the agent here."
+        static let unavailableTitle = "Open a project to chat"
+        static let unavailableSubtitle = "Open a project first, then use Agent like Cursor chat."
     }
 }
 
 // MARK: - Phase tint (UI)
 
 extension AgentControllerPhase {
-    /// Color for the Agent Command phase chip.
     var tintColor: Color {
         switch self {
         case .idle, .ready: return .secondary

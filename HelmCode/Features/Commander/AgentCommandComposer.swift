@@ -19,6 +19,10 @@ struct AgentCommandComposer: View {
     var canAddSelectedFile: Bool
     var onSend: () -> Void
 
+    /// Snapshot catalog when the sheet opens so parent agent polls do not reset scroll.
+    @State private var modelPickerOpen = false
+    @State private var modelPickerSnapshot: [AgentModelOption] = []
+
     private var composerDisabled: Bool {
         agent.phase.isBusy || !agent.socketState.isReady
     }
@@ -102,6 +106,22 @@ struct AgentCommandComposer: View {
                 .padding(.vertical, 6)
                 .focused(promptFocused)
                 .disabled(composerDisabled)
+                // Hardware keyboard: Return → send · Option+Return → newline (Cursor-style).
+                .onKeyPress(keys: [.return]) { press in
+                    if press.modifiers.contains(.option) {
+                        insertPromptNewline()
+                        return .handled
+                    }
+                    // Ignore other modifiers (⌘/⇧) so they don't also send by accident.
+                    if !press.modifiers.isEmpty {
+                        return .ignored
+                    }
+                    if canLaunch {
+                        onSend()
+                        return .handled
+                    }
+                    return .handled
+                }
 
             if agent.prompt.isEmpty {
                 Text(agent.composerMode.promptPlaceholder)
@@ -136,33 +156,84 @@ struct AgentCommandComposer: View {
             }
             .accessibilityLabel("Mode \(agent.composerMode.title)")
 
-            chipMenu(
-                title: AgentModelOption.title(for: agent.modelID),
-                systemImage: "cpu"
-            ) {
-                ForEach(AgentModelOption.catalog) { model in
-                    Button {
-                        agent.modelID = model.id
-                    } label: {
-                        if model.id == agent.modelID {
-                            Label(model.title, systemImage: "checkmark")
-                        } else {
-                            VStack(alignment: .leading) {
-                                Text(model.title)
-                                Text(model.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .accessibilityLabel("Model \(AgentModelOption.title(for: agent.modelID))")
+            modelPickerButton
 
             Spacer(minLength: 4)
 
             sendButton
         }
+        .sheet(isPresented: $modelPickerOpen) {
+            modelPickerSheet
+        }
+    }
+
+    /// Sheet list (not Menu) — agent timeline polls re-render the composer every second;
+    /// Menu content was rebuilt and scroll jumped to the end. Snapshot freezes rows while open.
+    private var modelPickerButton: some View {
+        Button {
+            modelPickerSnapshot = agent.modelCatalog
+            modelPickerOpen = true
+        } label: {
+            Label {
+                HStack(spacing: 3) {
+                    Text(AgentModelOption.title(for: agent.modelID, in: agent.modelCatalog))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                }
+            } icon: {
+                Image(systemName: "cpu")
+            }
+            .font(.caption.weight(.semibold))
+            .labelStyle(.titleAndIcon)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.glass)
+        .controlSize(.small)
+        .disabled(composerDisabled)
+        .accessibilityLabel(
+            "Model \(AgentModelOption.title(for: agent.modelID, in: agent.modelCatalog))"
+        )
+    }
+
+    private var modelPickerSheet: some View {
+        NavigationStack {
+            List {
+                ForEach(modelPickerSnapshot) { model in
+                    Button {
+                        agent.modelID = model.id
+                        modelPickerOpen = false
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.title)
+                                    .foregroundStyle(.primary)
+                                Text(model.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(model.id)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Spacer(minLength: 0)
+                            if model.id == agent.modelID {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Model")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { modelPickerOpen = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private var sendButton: some View {
@@ -178,8 +249,10 @@ struct AgentCommandComposer: View {
         .frame(width: 34, height: 34)
         .buttonStyle(.glassProminent)
         .disabled(!canLaunch)
+        // Primary path is Return in the editor; keep ⌘↩ as a backup when focus is elsewhere.
         .keyboardShortcut(.return, modifiers: [.command])
         .accessibilityLabel("Send")
+        .help("Return to send · Option+Return for newline")
         .animation(.easeInOut(duration: 0.15), value: canLaunch)
     }
 
@@ -236,7 +309,7 @@ struct AgentCommandComposer: View {
         return set
     }
 
-    // MARK: - File tags
+    // MARK: - File tags / newlines
 
     private func insertSelectedFileTag() {
         guard let file = session.selectedFile, !file.isDirectory else { return }
@@ -253,29 +326,16 @@ struct AgentCommandComposer: View {
         promptSelection = edited.selection
         promptFocused.wrappedValue = true
     }
-}
 
-// MARK: - Processing banner
-
-struct AgentProcessingBanner: View {
-    @ObservedObject var agent: AgentNetworkEngine
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-            Text(agent.composerMode == .agent ? "Agent running…" : "\(agent.composerMode.title)…")
-                .font(.caption.weight(.semibold))
-            Spacer(minLength: 0)
-            if let branch = agent.branch {
-                Text(branch)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .helmSystemGlassPanel(cornerRadius: 16, interactive: false)
+    /// Insert a raw newline at the caret (Option+Return). Avoids file-tag space padding.
+    private func insertPromptNewline() {
+        let edited = AgentPromptEditing.insertRaw(
+            "\n",
+            into: agent.prompt,
+            selection: promptSelection
+        )
+        agent.prompt = edited.text
+        promptSelection = edited.selection
     }
 }
+

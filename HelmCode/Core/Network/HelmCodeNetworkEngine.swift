@@ -94,7 +94,7 @@ final class HelmCodeNetworkEngine: ObservableObject {
         }
         guard !phase.isBusy else { throw HelmNetworkError.alreadyRunning }
 
-        if let active = runtimeStatus?.activeTasks, active >= concurrentTaskLimit {
+        if let active = runtimeStatus?.activeTaskCount, active >= concurrentTaskLimit {
             throw HelmNetworkError.concurrentLimit(limit: concurrentTaskLimit)
         }
 

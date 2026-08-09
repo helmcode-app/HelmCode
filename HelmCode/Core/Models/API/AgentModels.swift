@@ -2,16 +2,15 @@
 //  AgentModels.swift
 //  HelmCode
 //
-//  Codable contracts for runner-core WebSocket agent control plane
-//  (`agent/run`, `agent/status`, `agent/cancel`, `agent/progress`, `agent/done`).
-//  Aligned with services/runner/src/types.ts + agentEngine / agentRouter.
+//  UI-facing agent controller types: phases, composer controls, timeline stages,
+//  and EventLog nodes derived from session history / TaskProgressEvent.
 //
 
 import Foundation
 
 // MARK: - Event stages (timeline badges)
 
-/// Structured orchestration stages from `HelmCodeAgentEngine` timeline events.
+/// Structured orchestration stages used by the chat transcript.
 enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
     case accepted
     case worktreeReady = "worktree_ready"
@@ -44,7 +43,7 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
         case .accepted: return "Accepted"
         case .worktreeReady, .provisioning: return "Provisioning"
         case .contextBuilt: return "Context"
-        case .llmInvoke: return "LLM"
+        case .llmInvoke: return "Assistant"
         case .llmPatched: return "Patched"
         case .testing: return "Testing"
         case .testPassed: return "Tests Green"
@@ -55,22 +54,6 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
         case .success, .gitPushed: return "Pushed"
         case .failed: return "Failed"
         case .cancelled: return "Cancelled"
-        }
-    }
-
-    /// Visual family used by timeline badges.
-    var badgeKind: AgentTimelineBadgeKind {
-        switch self {
-        case .userCommand:
-            return .user
-        case .accepted, .worktreeReady, .provisioning, .contextBuilt, .llmInvoke, .llmPatched, .testing, .committing, .pushing:
-            return .provisioning
-        case .testFailed, .selfHealing, .selfHealingActive, .failed:
-            return .warning
-        case .testPassed, .success, .gitPushed:
-            return .success
-        case .cancelled:
-            return .cancelled
         }
     }
 
@@ -86,15 +69,6 @@ enum AgentEventStage: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
-enum AgentTimelineBadgeKind: Sendable, Equatable {
-    case user
-    case provisioning
-    case warning
-    case success
-    case cancelled
-    case neutral
-}
-
 // MARK: - Controller phase (UI state machine)
 
 /// High-level Agent Command Panel lifecycle (distinct from wire `TaskStatus`).
@@ -108,10 +82,10 @@ enum AgentControllerPhase: Equatable, Sendable {
     case failed(String)
     case cancelled
 
-    /// True only while an agent **task** is in flight (not socket handshake).
+    /// True only while an agent **turn** is in flight (not link handshake).
     ///
-    /// Important: `.connecting` must NOT be busy — otherwise a successful WS
-    /// handshake never transitions to `.ready` (`if !phase.isBusy { phase = .ready }`).
+    /// Important: `.connecting` must NOT be busy — otherwise a successful health
+    /// check never transitions to `.ready` (`if !phase.isBusy { phase = .ready }`).
     var isBusy: Bool {
         switch self {
         case .launching, .processing: return true
@@ -119,7 +93,7 @@ enum AgentControllerPhase: Equatable, Sendable {
         }
     }
 
-    /// Socket is still establishing / reconnecting (UI chrome only).
+    /// Link is still establishing / reconnecting (UI chrome only).
     var isLinking: Bool {
         switch self {
         case .connecting: return true
@@ -183,129 +157,32 @@ enum AgentComposerMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Selectable model labels for the composer (sent as task metadata).
+/// Selectable model labels for the composer (`provider/model` for `/v1/sessions` prompt).
+/// Prefer live catalog from `GET /v1/sessions/models` (connected providers only).
 struct AgentModelOption: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
 
-    static let catalog: [AgentModelOption] = [
-        .init(id: "gpt-4o", title: "GPT-4o", subtitle: "OpenAI"),
-        .init(id: "gpt-4.1", title: "GPT-4.1", subtitle: "OpenAI"),
-        .init(id: "claude-sonnet-4", title: "Claude Sonnet", subtitle: "Anthropic"),
-        .init(id: "claude-opus-4", title: "Claude Opus", subtitle: "Anthropic"),
-        .init(id: "grok-3", title: "Grok 3", subtitle: "xAI"),
-        .init(id: "gemini-2.5-pro", title: "Gemini 2.5 Pro", subtitle: "Google"),
+    /// Fallback when runner catalog is unavailable.
+    static let fallbackCatalog: [AgentModelOption] = [
+        .init(id: "opencode/big-pickle", title: "Big Pickle", subtitle: "OpenCode"),
     ]
 
-    static let defaultID = "gpt-4o"
+    static let defaultID = "opencode/big-pickle"
 
-    static func title(for id: String) -> String {
+    static func title(for id: String, in catalog: [AgentModelOption] = fallbackCatalog) -> String {
         catalog.first { $0.id == id }?.title ?? id
     }
-}
 
-// MARK: - agent/run params + envelopes
-
-/// JSON-RPC `agent/run` params (`AgentRunParams` in runner-core).
-struct AgentRunParams: Codable, Sendable, Equatable {
-    var taskId: String
-    var prompt: String
-    var baseBranch: String?
-    var testCommand: String?
-    var contextPaths: [String]?
-    var githubToken: String?
-    var maxCycles: Int?
-    var repoPath: String?
-    var remote: String?
-    var timeoutMs: Int?
-    var metadata: [String: JSONValue]?
-
-    init(
-        taskId: String = UUID().uuidString,
-        prompt: String,
-        baseBranch: String? = nil,
-        testCommand: String? = nil,
-        contextPaths: [String]? = nil,
-        githubToken: String? = nil,
-        maxCycles: Int? = 3,
-        repoPath: String? = nil,
-        remote: String? = nil,
-        timeoutMs: Int? = nil,
-        metadata: [String: JSONValue]? = nil
-    ) {
-        self.taskId = taskId
-        self.prompt = prompt
-        self.baseBranch = baseBranch
-        self.testCommand = testCommand
-        self.contextPaths = contextPaths
-        self.githubToken = githubToken
-        self.maxCycles = maxCycles
-        self.repoPath = repoPath
-        self.remote = remote
-        self.timeoutMs = timeoutMs
-        self.metadata = metadata
+    static func fromDTO(_ dto: SessionModelDTO) -> AgentModelOption {
+        AgentModelOption(id: dto.id, title: dto.title, subtitle: dto.provider)
     }
-
-    static func launch(
-        prompt: String,
-        contextPaths: [String],
-        baseBranch: String?,
-        testCommand: String?,
-        githubToken: String?,
-        maxCycles: Int = 3,
-        mode: AgentComposerMode = .agent,
-        modelID: String = AgentModelOption.defaultID
-    ) -> AgentRunParams {
-        AgentRunParams(
-            taskId: UUID().uuidString.lowercased(),
-            prompt: prompt,
-            baseBranch: baseBranch.flatMap { $0.isEmpty ? nil : $0 },
-            testCommand: testCommand.flatMap { $0.isEmpty ? nil : $0 },
-            contextPaths: contextPaths.isEmpty ? nil : contextPaths,
-            githubToken: githubToken.flatMap { $0.isEmpty ? nil : $0 },
-            maxCycles: maxCycles,
-            metadata: [
-                "source": .string("helmcode-ipad"),
-                "client": .string("HelmCode"),
-                "mode": .string(mode.rawValue),
-                "model": .string(modelID),
-            ]
-        )
-    }
-}
-
-/// Immediate async result from `agent/run`.
-struct AgentRunAccepted: Codable, Sendable, Equatable {
-    let taskId: String
-    let status: String
-    let branch: String
-    let poll: String?
-    let cancel: String?
-}
-
-/// Live snapshot from `agent/status` (`AgentTaskSnapshot`).
-struct AgentTaskSnapshot: Codable, Sendable, Equatable {
-    let taskId: String
-    let status: TaskStatus
-    let branch: String
-    let events: [TaskProgressEvent]
-    let result: AgentResult?
-    let active: Bool
-}
-
-/// Terminal notification `agent/done` params.
-struct AgentDoneNotification: Codable, Sendable, Equatable {
-    let taskId: String
-    /// Wire may say `success` instead of `succeeded`.
-    let status: String
-    let result: AgentResult?
-    let error: String?
 }
 
 // MARK: - EventLog (UI timeline node)
 
-/// UI-facing timeline node derived from wire `TaskProgressEvent`.
+/// UI-facing timeline node derived from wire `TaskProgressEvent` / session history.
 struct EventLog: Identifiable, Equatable, Sendable, Hashable {
     let id: String
     let taskId: String
@@ -323,36 +200,13 @@ struct EventLog: Identifiable, Equatable, Sendable, Hashable {
             ?? arrivedAt
     }
 
-    var badgeKind: AgentTimelineBadgeKind {
-        if let stage {
-            return stage.badgeKind
-        }
-        return status.timelineBadgeKind
-    }
-
-    var stageLabel: String {
-        if let stage { return stage.displayName.uppercased() }
-        return status.displayName.uppercased()
-    }
-
-    /// Long terminal dumps live in message + detail stderr/stdout.
-    var logBody: String {
-        var lines: [String] = [message]
-        if let detail {
-            if let stderr = detail["stderr"]?.stringValue, !stderr.isEmpty {
-                lines.append("--- stderr ---")
-                lines.append(stderr)
-            }
-            if let stdout = detail["stdout"]?.stringValue, !stdout.isEmpty {
-                lines.append("--- stdout ---")
-                lines.append(stdout)
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-
     init(from event: TaskProgressEvent, sequence: Int = 0) {
-        self.id = "\(event.taskId)|\(event.at)|\(event.stage?.rawValue ?? event.status.rawValue)|\(sequence)|\(event.message.hashValue)"
+        // Prefer stable server message id so streaming updates replace in place.
+        if let timelineId = event.detail?["timelineId"]?.stringValue, !timelineId.isEmpty {
+            self.id = "tl:\(timelineId)"
+        } else {
+            self.id = "\(event.taskId)|\(event.at)|\(event.stage?.rawValue ?? event.status.rawValue)|\(sequence)|\(event.message.hashValue)"
+        }
         self.taskId = event.taskId
         self.status = event.status
         self.stage = event.stage
@@ -362,22 +216,42 @@ struct EventLog: Identifiable, Equatable, Sendable, Hashable {
         self.detail = event.detail
         self.arrivedAt = Date()
     }
-}
 
-// MARK: - TaskStatus timeline helpers
+    /// In-place update for streaming assistant text (same timeline id).
+    func updating(message: String, detail: [String: JSONValue]?, status: TaskStatus) -> EventLog {
+        EventLog(
+            id: id,
+            taskId: taskId,
+            status: status,
+            stage: stage,
+            cycle: cycle,
+            message: message,
+            at: at,
+            detail: detail ?? self.detail,
+            arrivedAt: arrivedAt
+        )
+    }
 
-extension TaskStatus {
-    var timelineBadgeKind: AgentTimelineBadgeKind {
-        switch self {
-        case .queued, .running, .testing, .committing, .pushing:
-            return .provisioning
-        case .healing, .failed:
-            return .warning
-        case .succeeded:
-            return .success
-        case .cancelled:
-            return .cancelled
-        }
+    private init(
+        id: String,
+        taskId: String,
+        status: TaskStatus,
+        stage: AgentEventStage?,
+        cycle: Int?,
+        message: String,
+        at: String,
+        detail: [String: JSONValue]?,
+        arrivedAt: Date
+    ) {
+        self.id = id
+        self.taskId = taskId
+        self.status = status
+        self.stage = stage
+        self.cycle = cycle
+        self.message = message
+        self.at = at
+        self.detail = detail
+        self.arrivedAt = arrivedAt
     }
 }
 

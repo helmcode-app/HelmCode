@@ -38,6 +38,105 @@ struct RunnerCoreAPIClient: Sendable {
         try await get(path: "/v1/status", authorize: true)
     }
 
+    // MARK: - Agent sessions (`/v1/sessions/*`)
+
+    func sessionsHealth() async throws -> SessionsRuntimeHealth {
+        try await get(path: "/v1/sessions/health", authorize: true)
+    }
+
+    func sessionModels() async throws -> SessionModelsResponse {
+        try await get(path: "/v1/sessions/models", authorize: true)
+    }
+
+    func createSession(title: String? = nil) async throws -> AgentSessionDTO {
+        let body = CreateSessionBody(title: title)
+        let envelope: CreateSessionEnvelope = try await post(
+            path: "/v1/sessions",
+            body: body,
+            expectedStatus: 201
+        )
+        return envelope.session
+    }
+
+    func listSessions() async throws -> [AgentSessionDTO] {
+        let envelope: ListSessionsEnvelope = try await get(
+            path: "/v1/sessions",
+            authorize: true
+        )
+        return envelope.sessions
+    }
+
+    func getSession(id: String) async throws -> AgentSessionDTO {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let envelope: GetSessionEnvelope = try await get(
+            path: "/v1/sessions/\(encoded)",
+            authorize: true
+        )
+        return envelope.session
+    }
+
+    func promptSession(id: String, body: SessionPromptBody) async throws -> SessionPromptAccepted {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await post(
+            path: "/v1/sessions/\(encoded)/prompt",
+            body: body,
+            expectedStatus: 202
+        )
+    }
+
+    func sessionHistory(id: String, limit: Int? = 200) async throws -> SessionHistoryEnvelope {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        var path = "/v1/sessions/\(encoded)/history"
+        if let limit {
+            path += "?limit=\(limit)"
+        }
+        return try await get(path: path, authorize: true)
+    }
+
+    func abortSession(id: String) async throws -> SessionAbortResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await postEmpty(
+            path: "/v1/sessions/\(encoded)/abort",
+            expectedStatus: 200
+        )
+    }
+
+    func deleteSession(id: String) async throws -> SessionDeleteResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await perform(
+            try makeRequest(path: "/v1/sessions/\(encoded)", method: "DELETE", authorize: true),
+            expectedStatus: 200
+        )
+    }
+
+    func revertSession(id: String, messageId: String) async throws -> SessionRevertResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await post(
+            path: "/v1/sessions/\(encoded)/revert",
+            body: SessionRevertBody(messageId: messageId),
+            expectedStatus: 200
+        )
+    }
+
+    func unrevertSession(id: String) async throws -> SessionRevertResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await postEmpty(
+            path: "/v1/sessions/\(encoded)/unrevert",
+            expectedStatus: 200
+        )
+    }
+
+    func sessionDiff(id: String, messageId: String? = nil) async throws -> SessionDiffResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        var path = "/v1/sessions/\(encoded)/diff"
+        if let messageId, !messageId.isEmpty {
+            let q = messageId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? messageId
+            path += "?messageId=\(q)"
+        }
+        return try await get(path: path, authorize: true)
+    }
+
+    // Legacy task routes removed from runner-core; kept only if older images still expose them.
     func submitTask(_ body: TaskRequest) async throws -> TaskAcceptedResponse {
         try await post(path: "/v1/tasks", body: body, expectedStatus: 202)
     }

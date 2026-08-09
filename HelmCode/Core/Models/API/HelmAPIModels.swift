@@ -61,22 +61,33 @@ enum TaskStatus: String, Codable, Sendable, CaseIterable, Identifiable {
 
 // MARK: - Health / Status
 
-/// `GET /health` → `HealthStatus`
+/// `GET /health` → `HealthStatus` (runner-core open-core).
 struct HealthCheck: Codable, Sendable, Equatable {
     let ok: Bool
     let mode: HelmMode
     let version: String
     let uptimeMs: Int
-    let activeTasks: Int
+    /// Legacy pipeline field (removed server-side); default 0 when absent.
+    let activeTasks: Int?
+    /// Product agent sessions surface is enabled (`OPENCODE_ENABLED`).
+    let sessionsEnabled: Bool?
+
+    var activeTaskCount: Int { activeTasks ?? 0 }
 }
 
 /// `GET /v1/status`
 struct RuntimeStatus: Codable, Sendable, Equatable {
     let mode: HelmMode
     let version: String
-    let activeTasks: Int
-    let knownTasks: Int
+    let activeTasks: Int?
+    let knownTasks: Int?
     let authRequired: Bool?
+    let sessionsEnabled: Bool?
+    let sessionsManaged: Bool?
+    let vfsEnabled: Bool?
+    let terminalEnabled: Bool?
+
+    var activeTaskCount: Int { activeTasks ?? 0 }
 }
 
 // MARK: - Task request / accept
@@ -264,6 +275,26 @@ enum JSONValue: Codable, Sendable, Equatable, Hashable {
 
     var stringValue: String? {
         if case .string(let s) = self { return s }
+        return nil
+    }
+
+    var boolValue: Bool? {
+        if case .bool(let b) = self { return b }
+        return nil
+    }
+
+    var stringArrayValue: [String]? {
+        guard case .array(let items) = self else { return nil }
+        return items.compactMap(\.stringValue)
+    }
+
+    var objectValue: [String: JSONValue]? {
+        if case .object(let o) = self { return o }
+        return nil
+    }
+
+    var arrayValue: [JSONValue]? {
+        if case .array(let a) = self { return a }
         return nil
     }
 }

@@ -2,8 +2,8 @@
 //  CommanderView.swift
 //  HelmCode
 //
-//  AI agent command terminal — hosted in the system `.inspector` column.
-//  Delegates to AgentCommandPanel (prompt + contextPaths + streaming timeline).
+//  AI agent chat — hosted in the system `.inspector` column.
+//  Cursor-style sessions + composer (AgentCommandPanel).
 //
 
 import SwiftUI

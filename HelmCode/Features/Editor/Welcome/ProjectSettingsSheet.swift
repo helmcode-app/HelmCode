@@ -150,7 +150,7 @@ struct ProjectSettingsSheet: View {
 
     private enum Copy {
         static let nameFooter = "Leave empty to use the name from the runner / git remote."
-        static let runnerFooter = "HTTP, VFS (/v1/vfs), and Agent (/v1/agent) share this host."
+        static let runnerFooter = "HTTP, VFS (/v1/vfs), Agent sessions (/v1/sessions), and Terminal share this host."
         static let tokenFooter = "Required only when the runner sets OPENCORE_API_TOKEN."
     }
 }

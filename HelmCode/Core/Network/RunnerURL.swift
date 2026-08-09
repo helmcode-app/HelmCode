@@ -57,9 +57,17 @@ enum RunnerURL {
         webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/vfs")
     }
 
-    /// Build `ws(s)://host/…/v1/agent` for JSON-RPC `agent/run` orchestration.
-    static func webSocketAgentURL(fromBase baseURLString: String) -> URL? {
-        webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/agent")
+    /// Absolute `GET …/v1/sessions/health` for agent runtime probe.
+    static func sessionsHealthURL(fromBase raw: String) -> URL? {
+        let http = normalizeHTTP(raw)
+        guard isValid(http), var components = URLComponents(string: http) else { return nil }
+        let basePath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = basePath.isEmpty
+            ? "/v1/sessions/health"
+            : "/\(basePath)/v1/sessions/health"
+        components.query = nil
+        components.fragment = nil
+        return components.url
     }
 
     /// Build `ws(s)://host/…/v1/terminal` for WebSSH (xterm.js / Docker exec TTY).
