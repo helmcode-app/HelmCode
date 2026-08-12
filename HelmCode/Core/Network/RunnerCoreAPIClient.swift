@@ -44,8 +44,9 @@ struct RunnerCoreAPIClient: Sendable {
         try await get(path: "/v1/sessions/health", authorize: true)
     }
 
-    func sessionModels() async throws -> SessionModelsResponse {
-        try await get(path: "/v1/sessions/models", authorize: true)
+    func sessionModels(forceRefresh: Bool = false) async throws -> SessionModelsResponse {
+        let path = forceRefresh ? "/v1/sessions/models?refresh=1" : "/v1/sessions/models"
+        return try await get(path: path, authorize: true)
     }
 
     func createSession(title: String? = nil) async throws -> AgentSessionDTO {

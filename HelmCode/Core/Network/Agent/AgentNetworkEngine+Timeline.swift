@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  History → EventLog ingest, streaming upserts, and synthetic local rows.
+//  Poll loop: +Polling. Session CRUD: +Sessions.
 //
 
 import Foundation

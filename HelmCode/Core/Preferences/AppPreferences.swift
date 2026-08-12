@@ -32,6 +32,9 @@ enum AppStorageKey {
     static let runnerAPIToken = "helm.runner.apiToken"
     /// Center column shows Terminal instead of the code editor when true.
     static let showTerminal = "helm.column.showTerminal"
+    /// Prefix for per-runner model curation keys: `helm.agent.enabledModelIDs.<normalizedRunnerURL>`.
+    /// See `EnabledModelsPrefs`.
+    static let enabledModelIDsPrefix = "helm.agent.enabledModelIDs."
 }
 
 // MARK: - Last self-hosted runner (Open Project)

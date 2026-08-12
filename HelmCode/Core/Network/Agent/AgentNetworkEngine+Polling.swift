@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  History poll loop and multi-step turn completion heuristics.
+//  Ingest path: +Timeline.applyHistory. Launch starts polling via +Launch.
 //
 
 import Foundation

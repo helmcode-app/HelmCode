@@ -6,9 +6,6 @@
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct AgentCommandPanel: View {
     @ObservedObject var agent: AgentNetworkEngine
@@ -63,11 +60,11 @@ struct AgentCommandPanel: View {
         }
     }
 
-    // MARK: - No project
+    // MARK: - Layouts
 
     private var unavailableBody: some View {
         VStack(spacing: 0) {
-            headerBar(showActions: false)
+            AgentCommandHeader(agent: agent, showActions: false, onOpenSessions: {})
             Divider().opacity(0.5)
             FeatureEmptyPlaceholder(
                 systemImage: "bubble.left.and.bubble.right",
@@ -77,11 +74,11 @@ struct AgentCommandPanel: View {
         }
     }
 
-    // MARK: - Project open
-
     private var activeWorkspaceBody: some View {
         VStack(spacing: 0) {
-            headerBar(showActions: true)
+            AgentCommandHeader(agent: agent, showActions: true) {
+                showSessionPicker = true
+            }
             Divider().opacity(0.35)
             AgentTimelineView(agent: agent)
         }
@@ -114,102 +111,6 @@ struct AgentCommandPanel: View {
         .padding(.bottom, 10)
     }
 
-    // MARK: - Header (Cursor-like)
-
-    private func headerBar(showActions: Bool) -> some View {
-        HStack(spacing: 8) {
-            if showActions {
-                Button {
-                    showSessionPicker = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bubble.left.and.text.bubble.right")
-                            .font(.caption.weight(.semibold))
-                        Text(headerTitle)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(!agent.socketState.isReady)
-
-                Spacer(minLength: 4)
-
-                phaseChip
-
-                if agent.canUnrevert, !agent.phase.isBusy {
-                    Button {
-                        Task { await agent.unrevertLast() }
-                    } label: {
-                        Image(systemName: "arrow.uturn.forward")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Undo restore")
-                    .help("Undo last checkpoint restore")
-                }
-
-                if agent.phase.isBusy {
-                    Button {
-                        Task { await agent.cancelActiveTask() }
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Stop")
-                } else {
-                    Button {
-                        Task { await agent.startNewChat() }
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("New chat")
-                    .disabled(!agent.socketState.isReady)
-                }
-            } else {
-                Text("Agent")
-                    .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 0)
-                Text("UNAVAILABLE")
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.5)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.14), in: Capsule())
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground).opacity(0.55))
-    }
-
-    private var headerTitle: String {
-        if let t = agent.sessionTitle, !t.isEmpty { return t }
-        if agent.activeSessionID != nil { return "Chat" }
-        return "Agent"
-    }
-
-    private var phaseChip: some View {
-        Text(agent.phase.label.uppercased())
-            .font(.caption2.weight(.bold))
-            .tracking(0.55)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(agent.phase.tintColor.opacity(0.16), in: Capsule())
-            .foregroundStyle(agent.phase.tintColor)
-    }
-
     // MARK: - Launch
 
     private func launch() async {
@@ -240,21 +141,6 @@ struct AgentCommandPanel: View {
     private enum Copy {
         static let unavailableTitle = "Open a project to chat"
         static let unavailableSubtitle = "Open a project first, then use Agent like Cursor chat."
-    }
-}
-
-// MARK: - Phase tint (UI)
-
-extension AgentControllerPhase {
-    var tintColor: Color {
-        switch self {
-        case .idle, .ready: return .secondary
-        case .connecting: return .orange
-        case .launching, .processing: return .accentColor
-        case .succeeded: return .green
-        case .failed: return .red
-        case .cancelled: return .orange
-        }
     }
 }
 

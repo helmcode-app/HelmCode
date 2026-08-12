@@ -13,13 +13,17 @@ enum RunnerURL {
     private static let acceptedSchemes = httpSchemes.union(wsSchemes)
 
     /// Trim and map `ws(s)://` → `http(s)://` for the HTTP client / Settings storage.
+    /// Trailing slashes are stripped so prefs keys match (`…:18080` vs `…:18080/`).
     static func normalizeHTTP(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.lowercased().hasPrefix("ws://") {
-            return "http://" + trimmed.dropFirst(5)
+            trimmed = "http://" + trimmed.dropFirst(5)
+        } else if trimmed.lowercased().hasPrefix("wss://") {
+            trimmed = "https://" + trimmed.dropFirst(6)
         }
-        if trimmed.lowercased().hasPrefix("wss://") {
-            return "https://" + trimmed.dropFirst(6)
+        // Collapse trailing slashes but keep scheme://host form.
+        while trimmed.count > 1, trimmed.hasSuffix("/") {
+            trimmed.removeLast()
         }
         return trimmed
     }

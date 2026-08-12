@@ -162,6 +162,7 @@ enum AgentComposerMode: String, CaseIterable, Identifiable, Sendable {
 struct AgentModelOption: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
+    /// Provider display name (e.g. "OpenCode Go") — section headers / grouping.
     let subtitle: String
 
     /// Fallback when runner catalog is unavailable.
@@ -171,12 +172,57 @@ struct AgentModelOption: Identifiable, Hashable, Sendable {
 
     static let defaultID = "opencode/big-pickle"
 
+    /// Wire id shown under the title in lists (`opencode-go/glm-5.1`).
+    var wireID: String { id }
+
     static func title(for id: String, in catalog: [AgentModelOption] = fallbackCatalog) -> String {
         catalog.first { $0.id == id }?.title ?? id
     }
 
     static func fromDTO(_ dto: SessionModelDTO) -> AgentModelOption {
         AgentModelOption(id: dto.id, title: dto.title, subtitle: dto.provider)
+    }
+
+    static func fromResponse(_ response: SessionModelsResponse) -> [AgentModelOption] {
+        response.models.map(fromDTO)
+    }
+
+    /// Prefer Go → Zen free → first available (matches runner catalog defaults).
+    static func preferredDefaultID(
+        in catalog: [AgentModelOption],
+        serverDefault: String?
+    ) -> String? {
+        if let serverDefault, catalog.contains(where: { $0.id == serverDefault }) {
+            return serverDefault
+        }
+        return catalog.first(where: { $0.id.hasPrefix("opencode-go/") })?.id
+            ?? catalog.first(where: { $0.id.hasPrefix("opencode/") })?.id
+            ?? catalog.first?.id
+    }
+
+    /// Group by provider name, sorted for Settings lists.
+    static func groupedByProvider(
+        _ models: [AgentModelOption]
+    ) -> [(provider: String, models: [AgentModelOption])] {
+        let groups = Dictionary(grouping: models, by: \.subtitle)
+        return groups.keys.sorted().map { key in
+            (
+                provider: key,
+                models: (groups[key] ?? []).sorted {
+                    $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+            )
+        }
+    }
+
+    static func matching(_ models: [AgentModelOption], query: String) -> [AgentModelOption] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return models }
+        return models.filter {
+            $0.title.localizedCaseInsensitiveContains(q)
+                || $0.id.localizedCaseInsensitiveContains(q)
+                || $0.subtitle.localizedCaseInsensitiveContains(q)
+        }
     }
 }
 
@@ -255,7 +301,22 @@ struct EventLog: Identifiable, Equatable, Sendable, Hashable {
     }
 }
 
-// MARK: - ISO8601 without fractional seconds
+// MARK: - Wire timestamps
+
+extension Date {
+    /// Parse OpenCode / wire timestamps: ISO-8601, epoch seconds, or epoch ms.
+    static func helmParseWire(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        if let ms = Double(raw), ms > 1_000_000_000_000 {
+            return Date(timeIntervalSince1970: ms / 1000)
+        }
+        if let sec = Double(raw), sec > 1_000_000_000 {
+            return Date(timeIntervalSince1970: sec)
+        }
+        return ISO8601DateFormatter.helm.date(from: raw)
+            ?? ISO8601DateFormatter.helmNoFraction.date(from: raw)
+    }
+}
 
 extension ISO8601DateFormatter {
     static let helmNoFraction: ISO8601DateFormatter = {

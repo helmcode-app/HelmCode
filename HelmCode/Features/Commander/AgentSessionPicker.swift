@@ -37,7 +37,9 @@ struct AgentSessionPickerSheet: View {
                     } label: {
                         Label("New chat", systemImage: "square.and.pencil")
                             .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
                     }
+                    .buttonStyle(.plain)
                     .disabled(agent.phase.isBusy)
                 }
 
@@ -88,24 +90,18 @@ struct AgentSessionPickerSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Chats")
-            .navigationBarTitleDisplayMode(.inline)
+            .helmInlineNavigationTitle("Chats")
             .searchable(text: $query, prompt: "Search chats")
+            .helmSheetCloseToolbar {
+                dismiss()
+            }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                    }
-                    .accessibilityLabel("Close")
-                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await agent.refreshSessionList() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .font(.body.weight(.semibold))
                     }
                     .accessibilityLabel("Refresh")
                 }
@@ -172,14 +168,9 @@ struct AgentSessionPickerSheet: View {
                             .lineLimit(1)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 0)
-
-                if item.id == agent.activeSessionID {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
-                        .imageScale(.medium)
-                }
+                SelectableListCheckmark(selected: item.id == agent.activeSessionID)
             }
             .contentShape(Rectangle())
             .padding(.vertical, 2)
@@ -211,24 +202,11 @@ struct AgentSessionPickerSheet: View {
     }
 
     private func relativeTime(for item: AgentSessionDTO) -> String {
-        guard let date = parseDate(item.updatedAt ?? item.createdAt) else {
+        guard let date = Date.helmParseWire(item.updatedAt ?? item.createdAt) else {
             return item.status.rawValue
         }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func parseDate(_ raw: String?) -> Date? {
-        guard let raw, !raw.isEmpty else { return nil }
-        // OpenCode often sends epoch ms as a string.
-        if let ms = Double(raw), ms > 1_000_000_000_000 {
-            return Date(timeIntervalSince1970: ms / 1000)
-        }
-        if let sec = Double(raw), sec > 1_000_000_000 {
-            return Date(timeIntervalSince1970: sec)
-        }
-        return ISO8601DateFormatter.helm.date(from: raw)
-            ?? ISO8601DateFormatter.helmNoFraction.date(from: raw)
     }
 }

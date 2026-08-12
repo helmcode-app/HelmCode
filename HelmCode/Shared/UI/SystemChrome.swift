@@ -31,14 +31,34 @@ extension View {
             #endif
     }
 
-    /// Leading toolbar close control (xmark) for sheets.
+    /// Leading toolbar close control (`xmark`) for sheets — icon only, never text.
     func helmSheetCloseToolbar(disabled: Bool = false, action: @escaping () -> Void) -> some View {
         toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: action) {
                     Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
                 }
                 .accessibilityLabel("Close")
+                .disabled(disabled)
+            }
+        }
+    }
+
+    /// Trailing toolbar confirm control (`checkmark`) for sheets — icon only.
+    func helmSheetConfirmToolbar(
+        disabled: Bool = false,
+        systemImage: String = "checkmark",
+        accessibilityLabel: String = "Save",
+        action: @escaping () -> Void
+    ) -> some View {
+        toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: action) {
+                    Image(systemName: systemImage)
+                        .font(.body.weight(.semibold))
+                }
+                .accessibilityLabel(accessibilityLabel)
                 .disabled(disabled)
             }
         }

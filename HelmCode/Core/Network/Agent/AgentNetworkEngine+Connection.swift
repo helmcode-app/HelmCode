@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  Sessions health probe, reconnect backoff, and model catalog refresh.
+//  See AgentNetworkEngine.swift for the full file map.
 //
 
 import Foundation
@@ -87,18 +88,36 @@ extension AgentNetworkEngine {
 
     // MARK: - Model catalog
 
+    /// True when the live catalog has not been loaded from the runner yet.
+    var needsModelCatalogRefresh: Bool {
+        !modelCatalogLoaded || modelCatalog.isEmpty
+    }
+
+    /// Publish a catalog fetched outside the agent (e.g. Project Settings Models page).
+    func adoptModelCatalog(_ mapped: [AgentModelOption], serverDefault: String? = nil) {
+        guard !mapped.isEmpty else { return }
+        if mapped.map(\.id) != modelCatalog.map(\.id) {
+            modelCatalog = mapped
+        }
+        modelCatalogLoaded = true
+        if !mapped.contains(where: { $0.id == modelID }) {
+            modelID = AgentModelOption.preferredDefaultID(in: mapped, serverDefault: serverDefault)
+                ?? mapped[0].id
+        }
+    }
+
     /// Pull models available for currently authenticated OpenCode providers.
     /// Only publishes when the id set changes — prevents Menu/sheet scroll jumps.
     func refreshModelCatalog(force: Bool = false) async {
         if modelCatalogLoaded, !force { return }
         do {
-            let response = try await api.sessionModels()
-            let mapped = response.models.map(AgentModelOption.fromDTO)
+            let response = try await api.sessionModels(forceRefresh: force)
+            let mapped = AgentModelOption.fromResponse(response)
             guard !mapped.isEmpty else { return }
 
             let newIDs = mapped.map(\.id)
             let oldIDs = modelCatalog.map(\.id)
-            if newIDs != oldIDs {
+            if newIDs != oldIDs || force {
                 modelCatalog = mapped
                 log.info(
                     "loaded \(mapped.count, privacy: .public) session models; default=\(response.default ?? "-", privacy: .public)"
@@ -107,9 +126,10 @@ extension AgentNetworkEngine {
             modelCatalogLoaded = true
 
             if !mapped.contains(where: { $0.id == modelID }) {
-                modelID = response.default
-                    ?? mapped.first(where: { $0.id.hasPrefix("opencode/") })?.id
-                    ?? mapped[0].id
+                modelID = AgentModelOption.preferredDefaultID(
+                    in: mapped,
+                    serverDefault: response.default
+                ) ?? mapped[0].id
             }
         } catch {
             log.debug("session models soft-fail: \(error.localizedDescription, privacy: .public)")

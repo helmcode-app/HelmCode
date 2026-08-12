@@ -176,24 +176,13 @@ struct SidebarView: View {
             }
         }
         .helmSidebarListStyle()
-        .sheet(isPresented: Binding(
-            get: { projectSettingsID != nil },
-            set: { if !$0 { projectSettingsID = nil } }
-        )) {
-            if let id = projectSettingsID {
-                ProjectSettingsSheet(
-                    session: session,
-                    engine: engine,
-                    vfs: vfs,
-                    agent: agent,
-                    projectID: id,
-                    isPresented: Binding(
-                        get: { projectSettingsID != nil },
-                        set: { if !$0 { projectSettingsID = nil } }
-                    )
-                )
-            }
-        }
+        .projectSettingsSheet(
+            projectID: $projectSettingsID,
+            session: session,
+            engine: engine,
+            vfs: vfs,
+            agent: agent
+        )
     }
 
     // MARK: - Tree dialogs

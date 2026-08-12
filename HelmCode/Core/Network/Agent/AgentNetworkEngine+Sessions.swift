@@ -3,6 +3,7 @@
 //  HelmCode
 //
 //  Session list, create/select/delete, revert/unrevert, and restore helpers.
+//  Prompt launch is in +Launch; history poll in +Polling.
 //
 
 import Foundation

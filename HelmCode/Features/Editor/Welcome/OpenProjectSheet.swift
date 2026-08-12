@@ -4,6 +4,7 @@
 //
 //  Open Project: Hosted (reserved) | Self-hosted (runner URL + optional token).
 //  This is the only place to bind a workspace to a runner-core instance.
+//  Form pieces: OpenProjectSelfHostedForm, OpenProjectHostedPlaceholder.
 //
 
 import SwiftUI
@@ -87,88 +88,18 @@ struct OpenProjectSheet: View {
     private var tabContent: some View {
         switch tab {
         case .hosted:
-            hostedPlaceholder
+            OpenProjectHostedPlaceholder()
         case .selfHosted:
-            selfHostedForm
+            OpenProjectSelfHostedForm(
+                runnerURL: $runnerURL,
+                apiToken: $apiToken,
+                isConnecting: isConnecting,
+                onConfirm: { Task { await connectSelfHosted() } }
+            )
         }
     }
 
-    // MARK: - Hosted (reserved)
-
-    private var hostedPlaceholder: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "cloud")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.secondary)
-            Text("HelmCode Hosted")
-                .font(.title3.weight(.semibold))
-            Text("Connect to managed runners in the cloud. This option will be available in a future release.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            Text("Coming soon")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 48)
-        .padding(.horizontal, 20)
-    }
-
-    // MARK: - Self-hosted
-
-    private var selfHostedForm: some View {
-        Form {
-            Section {
-                TextField("http://127.0.0.1:18080", text: $runnerURL)
-                    .helmURLFieldStyle()
-                    .disabled(isConnecting)
-            } header: {
-                Text("Runner URL")
-            } footer: {
-                Text("Docker compose publishes host port 18080 → container 8080. Same host serves HTTP, VFS (/v1/vfs), and Agent sessions (/v1/sessions).")
-            }
-
-            Section {
-                SecureField("Bearer token (optional)", text: $apiToken)
-                    .helmMonospacedFieldStyle()
-                    .disabled(isConnecting)
-                    .textContentType(.password)
-            } header: {
-                Text("API Token")
-            } footer: {
-                Text("Required only when the runner sets OPENCORE_API_TOKEN. Leave empty for unauthenticated local dev.")
-            }
-
-            Section {
-                Button {
-                    Task { await connectSelfHosted() }
-                } label: {
-                    HStack {
-                        Spacer(minLength: 0)
-                        if isConnecting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.trailing, 8)
-                            Text("Connecting…")
-                        } else {
-                            Text("Confirm")
-                                .fontWeight(.semibold)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                }
-                .disabled(!canConfirm || isConnecting)
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private var canConfirm: Bool {
-        RunnerURL.isValid(runnerURL)
-    }
+    // MARK: - Connect
 
     @MainActor
     private func connectSelfHosted() async {

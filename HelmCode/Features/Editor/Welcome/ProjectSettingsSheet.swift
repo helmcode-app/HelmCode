@@ -2,7 +2,7 @@
 //  ProjectSettingsSheet.swift
 //  HelmCode
 //
-//  Edit project display name, runner URL, and optional API token.
+//  Edit project display name, runner URL, optional API token, and model enablement.
 //  Opened from project list long-press / context menu.
 //
 
@@ -21,9 +21,15 @@ struct ProjectSettingsSheet: View {
     @State private var apiToken: String = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
+    @State private var runnerReachable = false
+    @State private var isProbingRunner = false
 
     private var project: WorkspaceProject? {
         session.projects.first { $0.id == projectID }
+    }
+
+    private var normalizedDraftURL: String {
+        RunnerURL.normalizeHTTP(runnerURL)
     }
 
     var body: some View {
@@ -32,6 +38,7 @@ struct ProjectSettingsSheet: View {
                 nameSection
                 runnerURLSection
                 tokenSection
+                modelsSection
                 if let errorMessage {
                     Section {
                         Text(errorMessage)
@@ -47,16 +54,33 @@ struct ProjectSettingsSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button {
                         Task { await save() }
+                    } label: {
+                        Group {
+                            if isSaving {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                            }
+                        }
                     }
-                    .fontWeight(.semibold)
+                    .accessibilityLabel("Save")
                     .disabled(!canSave || isSaving)
                 }
             }
             .onAppear(perform: loadFields)
+            .task(id: probeIdentity) {
+                await probeRunner()
+            }
             .interactiveDismissDisabled(isSaving)
         }
+    }
+
+    /// Re-probe when URL or token draft changes.
+    private var probeIdentity: String {
+        "\(normalizedDraftURL)|\(apiToken)"
     }
 
     private var nameSection: some View {
@@ -95,6 +119,51 @@ struct ProjectSettingsSheet: View {
         }
     }
 
+    private var modelsSection: some View {
+        Section {
+            if runnerReachable, RunnerURL.isValid(runnerURL) {
+                NavigationLink {
+                    ModelsSettingsView(
+                        baseURL: normalizedDraftURL,
+                        apiToken: apiToken,
+                        agent: agent
+                    )
+                } label: {
+                    Label("Models", systemImage: "cpu")
+                }
+                .disabled(isSaving)
+            } else {
+                Label {
+                    HStack {
+                        Text("Models")
+                        if isProbingRunner {
+                            Spacer(minLength: 8)
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "cpu")
+                }
+                .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Agent")
+        } footer: {
+            Text(modelsFooterText)
+        }
+    }
+
+    private var modelsFooterText: String {
+        if runnerReachable, RunnerURL.isValid(runnerURL) {
+            return Copy.modelsFooter
+        }
+        if isProbingRunner {
+            return Copy.modelsProbingFooter
+        }
+        return Copy.modelsUnavailableFooter
+    }
+
     private func loadFields() {
         guard let project else {
             isPresented = false
@@ -107,6 +176,23 @@ struct ProjectSettingsSheet: View {
 
     private var canSave: Bool {
         RunnerURL.isValid(runnerURL)
+    }
+
+    @MainActor
+    private func probeRunner() async {
+        guard RunnerURL.isValid(runnerURL) else {
+            runnerReachable = false
+            isProbingRunner = false
+            return
+        }
+        isProbingRunner = true
+        defer { isProbingRunner = false }
+        let url = normalizedDraftURL
+        let token = apiToken
+        let online = await RunnerHealthProbe.isReachable(baseURL: url, apiToken: token)
+        // Ignore stale results if the user edited the URL mid-probe.
+        guard RunnerURL.normalizeHTTP(runnerURL) == url else { return }
+        runnerReachable = online
     }
 
     @MainActor
@@ -152,5 +238,10 @@ struct ProjectSettingsSheet: View {
         static let nameFooter = "Leave empty to use the name from the runner / git remote."
         static let runnerFooter = "HTTP, VFS (/v1/vfs), Agent sessions (/v1/sessions), and Terminal share this host."
         static let tokenFooter = "Required only when the runner sets OPENCORE_API_TOKEN."
+        static let modelsFooter =
+            "Choose which models appear in the Commander picker. Does not change provider auth on the server."
+        static let modelsProbingFooter = "Checking whether the Runner URL is reachable…"
+        static let modelsUnavailableFooter =
+            "Available when the Runner URL is reachable. Choose which models appear in the Commander picker."
     }
 }

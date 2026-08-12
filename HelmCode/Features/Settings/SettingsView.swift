@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  App settings sheet: Appearance, Layout, About.
-//  Runner connection is project-scoped (Open Project / Project Settings).
+//  Runner connection + models are project-scoped (Project Settings).
 //
 
 import SwiftUI
