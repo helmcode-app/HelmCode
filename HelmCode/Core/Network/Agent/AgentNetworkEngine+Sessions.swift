@@ -32,6 +32,7 @@ extension AgentNetworkEngine {
         sessionID = nil
         sessionTitle = nil
         canUnrevert = false
+        suppressedTimelineIDs = []
         resetSession()
         do {
             let session = try await api.createSession(title: "New chat")
@@ -53,6 +54,7 @@ extension AgentNetworkEngine {
         stopPolling()
         sessionID = id
         canUnrevert = false
+        suppressedTimelineIDs = []
         result = nil
         lastError = nil
         pollStatus = nil
@@ -83,6 +85,7 @@ extension AgentNetworkEngine {
                 sessionID = nil
                 sessionTitle = nil
                 canUnrevert = false
+                suppressedTimelineIDs = []
                 resetSession()
             }
             await refreshSessionList()
@@ -98,6 +101,7 @@ extension AgentNetworkEngine {
     /// 1. Capture that user message → put it back in the composer
     /// 2. OpenCode revert (file + server history effects)
     /// 3. Drop that message and every timeline row after it locally
+    /// 4. Remember suppressed ids so a later history reload does not resurrect them
     func revertToMessage(messageId: String) async {
         guard let sid = sessionID ?? activeTaskID else { return }
         guard !phase.isBusy else { return }
@@ -107,8 +111,9 @@ extension AgentNetworkEngine {
             return
         }
 
-        // Snapshot prompt text before server history changes.
+        // Snapshot prompt text + which rows we will hide (before server changes).
         let restorePrompt = promptTextForRestore(messageId: mid)
+        let idsToSuppress = timelineIDsFromMessageOnward(messageId: mid, inclusive: true)
 
         do {
             _ = try await api.revertSession(id: sid, messageId: mid)
@@ -118,23 +123,29 @@ extension AgentNetworkEngine {
             pollStatus = nil
             stopPolling()
 
-            // Rebuild from server, then ensure the restored message + later rows are gone.
+            // Persist suppress set *before* reloading — OpenCode often still returns
+            // reverted messages in GET history, and the next send reloads prior history.
+            suppressedTimelineIDs.formUnion(idsToSuppress)
+            suppressedTimelineIDs.insert(mid)
+
             seenTimelineIDs = []
             eventLog = []
             eventSequence = 0
             timelineIDsBeforeTurn = []
             let history = try await api.sessionHistory(id: sid, limit: 200)
             applyHistory(history, forDisplay: true)
+            // Belt-and-suspenders if server still has the cut message.
             trimTimelineFromMessage(messageId: mid, inclusive: true)
 
-            // Composer gets the restored user text for re-send / edit.
             if let restorePrompt, !restorePrompt.isEmpty {
                 prompt = restorePrompt
             }
 
             settleIdleAfterRestore()
             await refreshSessionList()
-            log.info("reverted sessionId=\(sid, privacy: .public) messageId=\(mid, privacy: .public)")
+            log.info(
+                "reverted sessionId=\(sid, privacy: .public) messageId=\(mid, privacy: .public) suppressed=\(self.suppressedTimelineIDs.count, privacy: .public)"
+            )
         } catch {
             lastError = mapError(error)
             phase = .failed(mapError(error))
@@ -148,6 +159,7 @@ extension AgentNetworkEngine {
         do {
             _ = try await api.unrevertSession(id: sid)
             canUnrevert = false
+            suppressedTimelineIDs = []
             seenTimelineIDs = []
             eventLog = []
             eventSequence = 0
@@ -259,13 +271,28 @@ extension AgentNetworkEngine {
         return AgentTimelineBuilders.normalizeUserPrompt(entry.message)
     }
 
-    /// Drop `messageId` (optional) and every eventLog row after it.
+    /// All timeline ids from `messageId` onward (for suppress set).
+    func timelineIDsFromMessageOnward(messageId: String, inclusive: Bool) -> Set<String> {
+        guard let idx = eventLog.firstIndex(where: {
+            $0.detail?["timelineId"]?.stringValue == messageId
+        }) else {
+            return [messageId]
+        }
+        let start = inclusive ? idx : eventLog.index(after: idx)
+        guard start < eventLog.endIndex else { return inclusive ? [messageId] : [] }
+        var ids = Set(
+            eventLog[start...].compactMap { $0.detail?["timelineId"]?.stringValue }
+                .filter { !$0.isEmpty }
+        )
+        if inclusive { ids.insert(messageId) }
+        return ids
+    }
+
+    /// Drop `messageId` and every eventLog row after it (local UI only).
     func trimTimelineFromMessage(messageId: String, inclusive: Bool) {
         guard let idx = eventLog.firstIndex(where: {
             $0.detail?["timelineId"]?.stringValue == messageId
         }) else {
-            // Server already removed it; still drop any rows after the last kept user turn
-            // that might be orphan agent fragments with no ids.
             return
         }
         let cut = inclusive ? idx : eventLog.index(after: idx)
@@ -274,7 +301,6 @@ extension AgentNetworkEngine {
         let removedIDs = Set(
             eventLog[cut...].compactMap { $0.detail?["timelineId"]?.stringValue }
         )
-        // Also remove the cut message id when inclusive.
         var dropIDs = removedIDs
         if inclusive {
             dropIDs.insert(messageId)
@@ -282,6 +308,7 @@ extension AgentNetworkEngine {
 
         eventLog = kept
         seenTimelineIDs.subtract(dropIDs)
+        suppressedTimelineIDs.formUnion(dropIDs)
         timelineIDsBeforeTurn = Set(
             eventLog.compactMap { $0.detail?["timelineId"]?.stringValue }
                 .filter { !$0.isEmpty }

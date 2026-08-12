@@ -3,7 +3,7 @@
 //  HelmCode
 //
 //  Cursor-style chat transcript: user bubbles + grouped agent turn cards.
-//  Restore checkpoint only on user messages.
+//  Restore checkpoint only on user messages (confirm anchored to that bubble).
 //
 
 import SwiftUI
@@ -13,7 +13,6 @@ import UIKit
 
 struct AgentTimelineView: View {
     @ObservedObject var agent: AgentNetworkEngine
-    @State private var confirmRevertId: String?
 
     private var transcript: [AgentTranscriptItem] {
         AgentTranscriptItem.build(from: agent.eventLog)
@@ -27,19 +26,32 @@ struct AgentTimelineView: View {
                         emptyState
                             .transition(.opacity)
                     } else {
+                        let lastAgentTurnID = transcript.last(where: {
+                            if case .agentTurn = $0 { return true }
+                            return false
+                        })?.id
+
                         ForEach(transcript) { item in
                             switch item {
                             case .user(let entry):
                                 AgentUserBubble(
                                     entry: entry,
-                                    onRevert: userMessageId(for: entry).map { mid in
-                                        { confirmRevertId = mid }
+                                    onConfirmRevert: { mid in
+                                        Task { await agent.revertToMessage(messageId: mid) }
                                     }
                                 )
                                 .id(item.id)
                             case .agentTurn(_, let parts):
-                                AgentTurnCard(parts: parts)
-                                    .id(item.id)
+                                // Done only on the latest agent turn after the current task succeeds.
+                                let isLatestTurn = item.id == lastAgentTurnID
+                                AgentTurnCard(
+                                    parts: parts,
+                                    showDone: isLatestTurn && agent.phase == .succeeded,
+                                    onUndoRestore: isLatestTurn && agent.canUnrevert
+                                        ? { Task { await agent.unrevertLast() } }
+                                        : nil
+                                )
+                                .id(item.id)
                             }
                         }
                     }
@@ -47,11 +59,6 @@ struct AgentTimelineView: View {
                     if let err = agent.lastError, agent.result == nil, !agent.phase.isBusy {
                         errorBanner(err)
                             .id("error-banner")
-                    }
-
-                    if agent.phase == .succeeded {
-                        doneFooter
-                            .id("done-footer")
                     }
 
                     Color.clear.frame(height: 8).id("chat-bottom")
@@ -69,26 +76,6 @@ struct AgentTimelineView: View {
             }
             .onChange(of: agent.phase.label) { _, _ in
                 scrollToBottom(proxy: proxy)
-            }
-            .confirmationDialog(
-                "Restore checkpoint?",
-                isPresented: Binding(
-                    get: { confirmRevertId != nil },
-                    set: { if !$0 { confirmRevertId = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Restore", role: .destructive) {
-                    if let mid = confirmRevertId {
-                        Task { await agent.revertToMessage(messageId: mid) }
-                    }
-                    confirmRevertId = nil
-                }
-                Button("Cancel", role: .cancel) {
-                    confirmRevertId = nil
-                }
-            } message: {
-                Text("Removes this message and everything after, undoes file changes, and puts the text back in the input. You can undo the restore once.")
             }
         }
     }
@@ -110,25 +97,6 @@ struct AgentTimelineView: View {
         .padding(.vertical, 56)
     }
 
-    private var doneFooter: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text("Done")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            if agent.canUnrevert {
-                Button("Undo restore") {
-                    Task { await agent.unrevertLast() }
-                }
-                .font(.caption.weight(.semibold))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
     private func errorBanner(_ message: String) -> some View {
         Text(message)
             .font(.caption)
@@ -138,15 +106,6 @@ struct AgentTimelineView: View {
             .padding(12)
             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 12)
-    }
-
-    /// Restore only for user-authored messages with a real OpenCode id.
-    private func userMessageId(for entry: EventLog) -> String? {
-        guard entry.stage == .userCommand else { return nil }
-        guard let mid = entry.detail?["timelineId"]?.stringValue, mid.hasPrefix("msg") else {
-            return nil
-        }
-        return mid
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {

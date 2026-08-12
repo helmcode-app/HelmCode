@@ -81,6 +81,11 @@ extension AgentNetworkEngine {
         let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
+        // After Restore, OpenCode may still return these ids in history — keep them gone.
+        if suppressedTimelineIDs.contains(entry.id) {
+            return
+        }
+
         let role = (entry.role ?? "unknown").lowercased()
         let kind = (entry.kind ?? "message").lowercased()
         let stage: AgentEventStage

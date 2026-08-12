@@ -49,6 +49,10 @@ final class AgentNetworkEngine: ObservableObject {
     /// Public id of the active chat (for UI).
     var activeSessionID: String? { sessionID }
 
+    /// Message ids dropped by Restore (OpenCode may still return them in history).
+    /// Filtered out on every history apply until unrevert / new chat / switch session.
+    var suppressedTimelineIDs: Set<String> = []
+
     // MARK: - Internals (shared across extensions)
 
     var baseURLString: String {
@@ -283,6 +287,7 @@ final class AgentNetworkEngine: ObservableObject {
         seenTimelineIDs = []
         timelineIDsBeforeTurn = []
         // Keep sessionID so follow-up prompts reuse the conversation.
+        // Note: suppressedTimelineIDs is only cleared on new chat / switch / unrevert.
     }
 
     // MARK: - Shared helpers

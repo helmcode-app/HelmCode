@@ -51,6 +51,8 @@ struct IconListRow: View {
     let title: String
     var subtitle: String? = nil
     var subtitleMonospaced: Bool = false
+    /// Optional branch chip on the title row (project recents).
+    var branchTag: String? = nil
     var systemImage: String? = nil
     /// When set, shows IDEA-style project avatar instead of `systemImage`.
     var project: WorkspaceProject? = nil
@@ -70,6 +72,7 @@ struct IconListRow: View {
         self.title = title
         self.subtitle = subtitle
         self.subtitleMonospaced = subtitleMonospaced
+        self.branchTag = nil
         self.systemImage = systemImage
         self.project = nil
         self.isEnabled = isEnabled
@@ -86,8 +89,12 @@ struct IconListRow: View {
         runnerStatus: ProjectRunnerReachability? = nil
     ) {
         self.title = project.displayName
-        self.subtitle = subtitle ?? project.branchRemoteLine
+        // Second line: GitHub / remote only (branch moved to title-row tag).
+        let remote = project.remote.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.subtitle = subtitle ?? (remote.isEmpty ? nil : remote)
         self.subtitleMonospaced = subtitleMonospaced
+        let branch = project.trimmedBranch
+        self.branchTag = branch.isEmpty ? nil : branch
         self.systemImage = nil
         self.project = project
         self.isEnabled = isEnabled
@@ -101,9 +108,25 @@ struct IconListRow: View {
                 .frame(width: ProjectAvatarMetrics.list, alignment: .center)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
+                HStack(alignment: .center, spacing: 8) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
+                        .lineLimit(1)
+                    if let branchTag, !branchTag.isEmpty {
+                        Text(branchTag)
+                            .font(.caption2.weight(.semibold).monospaced())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(
+                                Color.secondary.opacity(isEnabled ? 0.14 : 0.08),
+                                in: Capsule(style: .continuous)
+                            )
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                }
                 if let subtitle {
                     Text(subtitle)
                         .font(subtitleMonospaced ? .caption.monospaced() : .caption)
