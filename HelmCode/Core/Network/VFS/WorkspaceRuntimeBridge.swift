@@ -101,4 +101,6 @@ enum WorkspaceRuntimeBridge {
         agent.detachFromProject()
         vfs.stop()
     }
+
+    // Source Control: WorkspaceRuntimeBridge+SourceControl.swift
 }

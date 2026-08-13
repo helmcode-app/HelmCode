@@ -2,8 +2,8 @@
 //  VFSModels.swift
 //  HelmCode
 //
-//  Codable models for runner-core `helm-vfs` methods and notifications.
-//  Protocol: runner-core/docs/api/vfs.md
+//  Codable models for runner-core `helm-vfs` core methods and notifications.
+//  Git wire types live in VFSGitModels.swift. Protocol: runner-core/docs/api/vfs.md
 //
 
 import Foundation
@@ -197,6 +197,8 @@ struct VFSWriteResult: Codable, Sendable, Equatable {
 }
 
 struct VFSEmptyParams: Encodable, Sendable {}
+
+// Git wire types: VFSGitModels.swift
 
 // MARK: - Notifications
 

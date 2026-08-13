@@ -13,6 +13,8 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var language: CodeMirrorLanguage
     var isDark: Bool
     var isEditable: Bool = true
+    /// When non-nil, mount `@codemirror/merge` unified merge (`text` = modified, this = original).
+    var mergeOriginal: String? = nil
     /// 1-based bookmarked lines for the open file.
     var bookmarkLines: [Int] = []
     /// When non-nil, scroll/select this line after the next document push.
@@ -247,14 +249,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 pendingStreamBegin = true
                 return
             }
-            let payload: [String: Any] = [
-                "text": "",
-                "language": parent.language.rawValue,
-                "dark": parent.isDark,
-                "readOnly": !parent.isEditable,
-                "bookmarks": [] as [Int],
-            ]
-            guard let json = Self.jsonEncode(payload) else { return }
+            guard let json = documentPayloadJSON(text: "", bookmarks: []) else { return }
             lastPayloadKey = documentKey(forText: "")
             lastMetaKey = metaKey
             lastBookmarkKey = nil
@@ -278,14 +273,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 pendingStreamEndText = finalText
                 return
             }
-            let payload: [String: Any] = [
-                "text": finalText,
-                "language": parent.language.rawValue,
-                "dark": parent.isDark,
-                "readOnly": !parent.isEditable,
-                "bookmarks": parent.bookmarkLines,
-            ]
-            guard let json = Self.jsonEncode(payload) else { return }
+            guard let json = documentPayloadJSON(text: finalText, bookmarks: parent.bookmarkLines) else { return }
             lastPayloadKey = documentKey(forText: finalText)
             lastMetaKey = metaKey
             lastBookmarkKey = nil
@@ -314,7 +302,8 @@ struct CodeMirrorHostView: UIViewRepresentable {
 
             // Hot reload: same language/theme, body changed externally → soft replace.
             // Important: only commit lastPayloadKey after we have a valid JS payload.
-            if parent.preferSoftTextReplace, textOnlyChange {
+            // Merge/diff surfaces always full-rebuild (unifiedMergeView binds original).
+            if parent.mergeOriginal == nil, parent.preferSoftTextReplace, textOnlyChange {
                 if let textJSON = Self.jsonEncode(parent.text) {
                     lastPayloadKey = key
                     // Don't re-push bookmarks on every remote keystroke-sized update —
@@ -325,14 +314,10 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 // Fall through to full setDocument if encoding fails.
             }
 
-            let payload: [String: Any] = [
-                "text": parent.text,
-                "language": parent.language.rawValue,
-                "dark": parent.isDark,
-                "readOnly": !parent.isEditable,
-                "bookmarks": parent.bookmarkLines,
-            ]
-            guard let json = Self.jsonEncode(payload) else { return false }
+            guard let json = documentPayloadJSON(
+                text: parent.text,
+                bookmarks: parent.mergeOriginal == nil ? parent.bookmarkLines : []
+            ) else { return false }
 
             lastPayloadKey = key
             lastMetaKey = meta
@@ -346,8 +331,24 @@ struct CodeMirrorHostView: UIViewRepresentable {
             return false
         }
 
+        private func documentPayloadJSON(text: String, bookmarks: [Int]) -> String? {
+            var payload: [String: Any] = [
+                "text": text,
+                "language": parent.language.rawValue,
+                "dark": parent.isDark,
+                "readOnly": !parent.isEditable || parent.mergeOriginal != nil,
+                "bookmarks": bookmarks,
+            ]
+            if let original = parent.mergeOriginal {
+                payload["merge"] = true
+                payload["original"] = original
+            }
+            return Self.jsonEncode(payload)
+        }
+
         private func pushBookmarksIfNeeded() {
             guard isReady else { return }
+            guard parent.mergeOriginal == nil else { return }
             let key = bookmarkKey
             guard key != lastBookmarkKey else { return }
             lastBookmarkKey = key
@@ -392,11 +393,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
                 parent.language.rawValue,
                 parent.isDark ? "d" : "l",
                 parent.isEditable ? "e" : "r",
+                parent.mergeOriginal == nil ? "n" : "m",
             ].joined(separator: "\u{1e}")
         }
 
         private func documentKey(forText text: String) -> String {
-            metaKey + "\u{1e}" + text
+            let original = parent.mergeOriginal ?? ""
+            return metaKey + "\u{1e}" + text + "\u{1e}" + original
         }
 
         private var bookmarkKey: String {

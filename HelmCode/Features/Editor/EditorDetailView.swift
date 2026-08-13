@@ -101,6 +101,13 @@ struct EditorDetailView: View {
                 engine: engine,
                 vfs: vfs
             )
+        case .viewingDiff(let project, let diff):
+            SourceControlDiffView(
+                project: project,
+                request: diff,
+                session: session,
+                vfs: vfs
+            )
         }
     }
 
@@ -177,6 +184,11 @@ struct EditorDetailView: View {
             HStack(spacing: LayoutMetrics.detailLeadingToolbarSpacing) {
                 EditorProjectSwitcher(session: session)
                 PlainToolbarLabel(title: file.name)
+            }
+        case .viewingDiff(_, let diff):
+            HStack(spacing: LayoutMetrics.detailLeadingToolbarSpacing) {
+                EditorProjectSwitcher(session: session)
+                PlainToolbarLabel(title: "Diff · \(diff.fileName)")
             }
         }
     }

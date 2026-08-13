@@ -78,7 +78,7 @@ Projects are **only** added via Open Project (no seed mocks). Metadata is cached
 - **Files** — keyboard outline (`SidebarFileTreeModel` / `SidebarFileTreeKeyboard`): ←/→ expand, ↑/↓ move + auto-scroll  
 - **Search** — find in project (case / whole-word); open match jumps to line  
 - **Bookmarks** — file/folder marks + editor line marks; type icons in the list  
-- **Source Control** — local mock (stage / commit / pull·push·fetch)  
+- **Source Control** — `Features/SourceControl/` (sidebar + center Diff); runner `vfs/gitStatus` / `gitRefs` / `gitShow` / `gitCheckout`; commit/sync via Terminal or Agent  
 - File type icons: Devicon **1x/2x/3x PNG** in `Assets.xcassets/FileTypeIcons/`  
   · resolve: `FileLanguageHint` (+ BrandAssets / ResolveTables)  
   · UI: `FileTypeIcon` · tints: `WorkspaceNodeIconStyle`  
@@ -99,13 +99,14 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Endpoint | `ws(s)://<host>/v1/vfs` (from Backend base URL) |
 | Auth | Same Bearer token as open-core when configured |
 | Client | `VFSNetworkEngine` — heartbeat, auto-reconnect, request/response map |
-| Methods | `vfs/initialize`, `vfs/read`, `vfs/read_chunk`, `vfs/write`, `vfs/shutdown` |
+| Methods | `vfs/initialize`, `vfs/read`, `vfs/read_chunk`, `vfs/write`, `vfs/shutdown`, git (`gitStatus` / `gitRefs` / `gitDiff` / `gitShow` / `gitCheckout`) |
 | Stream | `VFSStreamEngine` progressive open for large files |
 | Notifications | `vfs/didChange` → selective buffer reload / tree refresh (non-blocking receive) |
 | Editor | Autosave + ⌘S write-back; soft hot-reload keeps open file + scroll |
 | Identity | `initialize.name` / `remote` / `branch` → project title / subtitle / SCM |
 | Persistence | `SavedProjectRecord` in UserDefaults (metadata only; tree reloaded via VFS) |
-| Bridge | `WorkspaceRuntimeBridge` binds engines ↔ `WorkspaceSession` |
+| Bridge | `WorkspaceRuntimeBridge` (+ `+SourceControl`) binds engines ↔ `WorkspaceSession` |
+| Git client | `VFSGitModels` · `VFSNetworkEngine+Git` |
 | URL helpers | `RunnerURL` · `VFSPath` · `VFSConnect` (Open Project self-hosted flow) |
 
 Flat `entries` from initialize are assembled client-side into `WorkspaceNode` (`WorkspaceTreeAssembler`).

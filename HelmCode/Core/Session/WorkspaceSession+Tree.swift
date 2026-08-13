@@ -22,7 +22,6 @@ extension WorkspaceSession {
     @discardableResult
     func renameNode(id: WorkspaceNode.ID, to rawName: String) -> WorkspaceNode? {
         guard var project = selectedProject else { return nil }
-        let previousPath = project.root.find(id: id)?.path
         switch project.root.renaming(id: id, to: rawName) {
         case .failure(let error):
             lastTreeError = error.localizedDescription
@@ -30,9 +29,6 @@ extension WorkspaceSession {
         case .success(let result):
             project = project.withRoot(result.tree)
             replaceOpenProject(project)
-            if let previousPath {
-                noteRename(from: previousPath, to: result.node)
-            }
             lastTreeError = nil
             return result.node
         }
@@ -51,7 +47,6 @@ extension WorkspaceSession {
             if let sel = selectedFileID, project.root.find(id: sel) == nil {
                 selectedFileID = nil
             }
-            noteDelete(result.removed)
             removeBookmarks(nodeIDs: collectIDs(in: result.removed), projectID: project.id)
             lastTreeError = nil
             return true
@@ -84,7 +79,6 @@ extension WorkspaceSession {
         case .success(let tree):
             project = project.withRoot(tree)
             replaceOpenProject(project)
-            noteCreate(node)
             if !isDirectory {
                 selectedFileID = node.id
             }

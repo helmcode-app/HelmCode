@@ -199,6 +199,8 @@ final class VFSNetworkEngine: ObservableObject {
         let _: Empty = try await call(method: "vfs/shutdown", params: VFSEmptyParams())
     }
 
+    // Git RPCs: VFSNetworkEngine+Git.swift
+
     /// Cached text if present (exact key or slash-normalized match).
     func cachedContent(for path: String) -> String? {
         if let hit = fileBuffers[path] { return hit }

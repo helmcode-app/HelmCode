@@ -19,6 +19,7 @@ cd "$WORK"
 npm init -y >/dev/null
 npm install \
   codemirror \
+  @codemirror/merge \
   @codemirror/lang-javascript \
   @codemirror/lang-json \
   @codemirror/lang-markdown \

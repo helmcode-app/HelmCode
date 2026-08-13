@@ -25,7 +25,6 @@ struct SidebarView: View {
 
     @State private var dialog: SidebarTreeDialog?
     @State private var nameDraft = ""
-    @State private var commitMessage = ""
     @State private var projectSettingsID: WorkspaceProject.ID?
 
     private var navigator: Binding<SidebarNavigator> {
@@ -128,10 +127,7 @@ struct SidebarView: View {
         case .bookmarks:
             SidebarBookmarksView(session: session)
         case .sourceControl:
-            SidebarSourceControlView(
-                session: session,
-                commitMessage: $commitMessage
-            )
+            SidebarSourceControlView(session: session, vfs: vfs)
         }
     }
 

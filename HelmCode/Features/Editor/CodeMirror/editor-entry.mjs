@@ -68,6 +68,7 @@ import {
 } from "@codemirror/search"
 import { lintKeymap } from "@codemirror/lint"
 import { oneDark } from "@codemirror/theme-one-dark"
+import { unifiedMergeView } from "@codemirror/merge"
 import { javascript } from "@codemirror/lang-javascript"
 import { json } from "@codemirror/lang-json"
 import { markdown } from "@codemirror/lang-markdown"
@@ -919,11 +920,12 @@ function editorKeymap() {
 
 // MARK: Extensions
 
-function makeExtensions({ language, dark, readOnly }) {
+function makeExtensions({ language, dark, readOnly, merge, original }) {
+  const isMerge = !!merge
   const exts = [
     lineNumbers(),
-    bookmarkField,
-    bookmarkGutter(),
+    // Bookmarks are editor-only; skip in merge/diff surface.
+    ...(isMerge ? [] : [bookmarkField, bookmarkGutter()]),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),
@@ -946,7 +948,7 @@ function makeExtensions({ language, dark, readOnly }) {
       createPanel: (v) => new HelmSearchPanel(v),
     }),
     EditorView.lineWrapping,
-    documentChangeExtension(),
+    ...(isMerge ? [] : [documentChangeExtension()]),
     editorKeymap(),
     // Higher precedence than defaults so zoom / IDE keys win when overlapping.
     helmEditorKeymap(),
@@ -955,12 +957,24 @@ function makeExtensions({ language, dark, readOnly }) {
     fontSizeCompartment.of(fontSizeTheme(fontSizePx)),
   ]
 
+  if (isMerge) {
+    exts.push(
+      unifiedMergeView({
+        original: typeof original === "string" ? original : "",
+        mergeControls: false,
+        highlightChanges: true,
+        gutter: true,
+        collapseUnchanged: { margin: 2, minSize: 4 },
+      }),
+    )
+  }
+
   // oneDark must be the last CM *color* theme.
   if (dark) {
     exts.push(oneDark)
   }
 
-  if (readOnly) {
+  if (readOnly || isMerge) {
     exts.push(EditorState.readOnly.of(true))
   }
 
@@ -1002,9 +1016,10 @@ function boot() {
   let lastBookmarkLines = []
 
   window.HelmCodeEditor = {
-    setDocument({ text, language, dark, readOnly, bookmarks }) {
+    setDocument({ text, language, dark, readOnly, bookmarks, merge, original }) {
       if (!view) return
       const isDark = !!dark
+      const isMerge = !!merge
       setShellScheme(isDark)
       if (Array.isArray(bookmarks)) {
         lastBookmarkLines = bookmarks
@@ -1015,11 +1030,15 @@ function boot() {
           extensions: makeExtensions({
             language: language || "plain",
             dark: isDark,
-            readOnly: !!readOnly,
+            readOnly: !!readOnly || isMerge,
+            merge: isMerge,
+            original: typeof original === "string" ? original : "",
           }),
         }),
       )
-      applyBookmarkLines(view, lastBookmarkLines)
+      if (!isMerge) {
+        applyBookmarkLines(view, lastBookmarkLines)
+      }
       requestAnimationFrame(() => view.requestMeasure())
     },
     /**

@@ -15,6 +15,8 @@ struct WorkspaceRuntimeModifier: ViewModifier {
     @ObservedObject var agent: AgentNetworkEngine
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
 
+    @State private var scmRefreshTask: Task<Void, Never>?
+
     func body(content: Content) -> some View {
         content
             .task {
@@ -33,12 +35,22 @@ struct WorkspaceRuntimeModifier: ViewModifier {
             .onChange(of: vfs.tree) { _, _ in
                 WorkspaceRuntimeBridge.applyTree(from: vfs, engine: engine, to: session)
                 refreshRunnerStatus()
+                scheduleSourceControlRefresh(forceLoading: true)
             }
             .onChange(of: vfs.workspaceBranch) { _, _ in
                 WorkspaceRuntimeBridge.applyMetadata(from: vfs, engine: engine, to: session)
             }
             .onChange(of: vfs.workspaceRemote) { _, _ in
                 WorkspaceRuntimeBridge.applyMetadata(from: vfs, engine: engine, to: session)
+            }
+            .onChange(of: vfs.connectionState) { _, state in
+                if state.isReady {
+                    scheduleSourceControlRefresh(forceLoading: true)
+                }
+            }
+            .onChange(of: vfs.lastChange) { _, _ in
+                // Working-tree edits (editor save, host tools) → refresh status after a short debounce.
+                scheduleSourceControlRefresh(forceLoading: false, debounceNanoseconds: 350_000_000)
             }
     }
 
@@ -59,5 +71,24 @@ struct WorkspaceRuntimeModifier: ViewModifier {
             agent: agent
         )
         refreshRunnerStatus()
+        scheduleSourceControlRefresh(forceLoading: true)
+    }
+
+    private func scheduleSourceControlRefresh(
+        forceLoading: Bool,
+        debounceNanoseconds: UInt64 = 0
+    ) {
+        scmRefreshTask?.cancel()
+        scmRefreshTask = Task {
+            if debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await WorkspaceRuntimeBridge.refreshSourceControl(
+                from: vfs,
+                to: session,
+                forceLoading: forceLoading
+            )
+        }
     }
 }

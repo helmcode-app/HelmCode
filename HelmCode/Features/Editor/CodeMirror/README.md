@@ -13,6 +13,8 @@ Swift host + offline web assets (all under this folder).
 | `editor.bundle.js` | Minified CM6 IIFE → `window.HelmCodeEditor` |
 | `editor-entry.mjs` | Source used to rebuild the bundle |
 
+**Merge / Diff:** `setDocument({ merge: true, original, text, … })` mounts `@codemirror/merge` `unifiedMergeView` (read-only, no accept/reject controls). Used by Source Control → Diff.
+
 ## Invariants (do not regress)
 
 1. **Theme order:** `baseTheme` (layout) → `oneDark` (dark only). Do **not** mount another `EditorView.theme` after `oneDark` — that has wiped text colors in WKWebView.

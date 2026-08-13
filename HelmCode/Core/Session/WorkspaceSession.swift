@@ -18,7 +18,14 @@ final class WorkspaceSession: ObservableObject {
     @Published var selectedProjectID: WorkspaceProject.ID? {
         didSet { persistLastSelectedProjectID() }
     }
-    @Published var selectedFileID: WorkspaceNode.ID?
+    @Published var selectedFileID: WorkspaceNode.ID? {
+        didSet {
+            // Selecting a file from Files / Search clears any center-column diff.
+            if selectedFileID != nil {
+                sourceControlDiff = nil
+            }
+        }
+    }
     /// Mutated only by session (recents / open project).
     @Published var recentProjectIDs: [WorkspaceProject.ID]
     /// Bookmarks across projects (persisted). Mutated in `WorkspaceSession+Bookmarks`.
@@ -29,6 +36,8 @@ final class WorkspaceSession: ObservableObject {
     @Published var lastTreeError: String?
     /// After opening a bookmark / search hit, editor scrolls to this 1-based line once.
     @Published var pendingEditorRevealLine: Int?
+    /// When set, the center column shows a read-only git diff instead of the editor.
+    @Published var sourceControlDiff: SourceControlDiffRequest?
 
     let defaults: UserDefaults
     let recentLimit = 12
@@ -49,6 +58,7 @@ final class WorkspaceSession: ObservableObject {
         self.recentProjectIDs = Self.loadRecentIDs(from: defaults, known: resolved)
         self.bookmarks = Self.loadBookmarks(from: defaults)
         self.sourceControl = nil
+        self.sourceControlDiff = nil
         // Welcome first; project list stays cached from disk.
         self.selectedProjectID = nil
         self.isRestoring = false
@@ -71,6 +81,9 @@ final class WorkspaceSession: ObservableObject {
 
     var editorSurface: EditorSurface {
         guard let project = selectedProject else { return .welcome }
+        if let diff = sourceControlDiff {
+            return .viewingDiff(project: project, diff: diff)
+        }
         if let file = selectedFile, !file.isDirectory {
             return .editing(project: project, file: file)
         }
@@ -88,9 +101,10 @@ final class WorkspaceSession: ObservableObject {
         selectedProjectID = id
         selectedFileID = nil
         pendingEditorRevealLine = nil
+        sourceControlDiff = nil
         recordRecent(id)
         if sourceControlByProject[id] == nil {
-            sourceControlByProject[id] = SourceControlState.seed(for: project)
+            sourceControlByProject[id] = SourceControlState.loading(for: project)
         } else if var sc = sourceControlByProject[id] {
             sc.applyBranch(from: project)
             sourceControlByProject[id] = sc
@@ -106,6 +120,7 @@ final class WorkspaceSession: ObservableObject {
         selectedProjectID = nil
         selectedFileID = nil
         sourceControl = nil
+        sourceControlDiff = nil
         pendingEditorRevealLine = nil
     }
 
@@ -195,6 +210,17 @@ final class WorkspaceSession: ObservableObject {
     func openFile(_ id: WorkspaceNode.ID, revealLine: Int? = nil) {
         selectedFileID = id
         pendingEditorRevealLine = revealLine.map { max(1, $0) }
+    }
+
+    /// Show a read-only unified diff in the center column (Source Control → Diff).
+    func openSourceControlDiff(_ change: GitChange) {
+        selectedFileID = nil
+        pendingEditorRevealLine = nil
+        sourceControlDiff = SourceControlDiffRequest(change: change)
+    }
+
+    func clearSourceControlDiff() {
+        sourceControlDiff = nil
     }
 
     func consumePendingRevealLine() -> Int? {

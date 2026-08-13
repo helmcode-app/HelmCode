@@ -11,4 +11,6 @@ enum EditorSurface: Equatable {
     case welcome
     case emptyProject(WorkspaceProject)
     case editing(project: WorkspaceProject, file: WorkspaceNode)
+    /// Read-only CodeMirror merge diff from Source Control (`vfs/gitShow` + worktree).
+    case viewingDiff(project: WorkspaceProject, diff: SourceControlDiffRequest)
 }
