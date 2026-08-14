@@ -57,8 +57,19 @@ enum RunnerURL {
     }
 
     /// Build `ws(s)://host/…/v1/vfs` from an HTTP or WS base URL string.
-    static func webSocketVFSURL(fromBase baseURLString: String) -> URL? {
-        webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/vfs")
+    static func webSocketVFSURL(
+        fromBase baseURLString: String,
+        workspaceId: String = HelmWorkspace.defaultID
+    ) -> URL? {
+        guard let base = webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/vfs"),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        let id = workspaceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty {
+            components.queryItems = [URLQueryItem(name: "workspaceId", value: id)]
+        }
+        return components.url
     }
 
     /// Absolute `GET …/v1/sessions/health` for agent runtime probe.
@@ -79,7 +90,8 @@ enum RunnerURL {
         fromBase baseURLString: String,
         cols: Int = 80,
         rows: Int = 24,
-        token: String? = nil
+        token: String? = nil,
+        workspaceId: String = HelmWorkspace.defaultID
     ) -> URL? {
         guard let base = webSocketURL(fromBase: baseURLString, pathSuffix: "/v1/terminal"),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
@@ -88,6 +100,7 @@ enum RunnerURL {
         var items = [
             URLQueryItem(name: "cols", value: String(max(1, cols))),
             URLQueryItem(name: "rows", value: String(max(1, rows))),
+            URLQueryItem(name: "workspaceId", value: workspaceId),
         ]
         if let token {
             let t = token.trimmingCharacters(in: .whitespacesAndNewlines)

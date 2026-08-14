@@ -49,8 +49,15 @@ struct RunnerCoreAPIClient: Sendable {
         return try await get(path: path, authorize: true)
     }
 
-    func createSession(title: String? = nil) async throws -> AgentSessionDTO {
-        let body = CreateSessionBody(title: title)
+    func listWorkspaces() async throws -> ListWorkspacesEnvelope {
+        try await get(path: "/v1/workspaces", authorize: true)
+    }
+
+    func createSession(
+        title: String? = nil,
+        workspaceId: String = HelmWorkspace.defaultID
+    ) async throws -> AgentSessionDTO {
+        let body = CreateSessionBody(title: title, workspaceId: workspaceId)
         let envelope: CreateSessionEnvelope = try await post(
             path: "/v1/sessions",
             body: body,
@@ -94,10 +101,23 @@ struct RunnerCoreAPIClient: Sendable {
         return try await get(path: path, authorize: true)
     }
 
-    func abortSession(id: String) async throws -> SessionAbortResponse {
+    func cancelSession(id: String) async throws -> SessionCancelResponse {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         return try await postEmpty(
-            path: "/v1/sessions/\(encoded)/abort",
+            path: "/v1/sessions/\(encoded)/cancel",
+            expectedStatus: 200
+        )
+    }
+
+    func rewindSession(
+        id: String,
+        messageId: String,
+        restore: SessionRewindRestore = .both
+    ) async throws -> SessionRewindResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await post(
+            path: "/v1/sessions/\(encoded)/rewind",
+            body: SessionRewindBody(messageId: messageId, restore: restore),
             expectedStatus: 200
         )
     }
@@ -108,48 +128,6 @@ struct RunnerCoreAPIClient: Sendable {
             try makeRequest(path: "/v1/sessions/\(encoded)", method: "DELETE", authorize: true),
             expectedStatus: 200
         )
-    }
-
-    func revertSession(id: String, messageId: String) async throws -> SessionRevertResponse {
-        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return try await post(
-            path: "/v1/sessions/\(encoded)/revert",
-            body: SessionRevertBody(messageId: messageId),
-            expectedStatus: 200
-        )
-    }
-
-    func unrevertSession(id: String) async throws -> SessionRevertResponse {
-        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return try await postEmpty(
-            path: "/v1/sessions/\(encoded)/unrevert",
-            expectedStatus: 200
-        )
-    }
-
-    func sessionDiff(id: String, messageId: String? = nil) async throws -> SessionDiffResponse {
-        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        var path = "/v1/sessions/\(encoded)/diff"
-        if let messageId, !messageId.isEmpty {
-            let q = messageId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? messageId
-            path += "?messageId=\(q)"
-        }
-        return try await get(path: path, authorize: true)
-    }
-
-    // Legacy task routes removed from runner-core; kept only if older images still expose them.
-    func submitTask(_ body: TaskRequest) async throws -> TaskAcceptedResponse {
-        try await post(path: "/v1/tasks", body: body, expectedStatus: 202)
-    }
-
-    func pollTask(id: String) async throws -> TaskPollResponse {
-        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return try await get(path: "/v1/tasks/\(encoded)", authorize: true)
-    }
-
-    func cancelTask(id: String) async throws -> TaskCancelResponse {
-        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return try await postEmpty(path: "/v1/tasks/\(encoded)/cancel", expectedStatus: 202)
     }
 
     // MARK: - HTTP

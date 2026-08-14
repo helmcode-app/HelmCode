@@ -2,7 +2,7 @@
 //  AgentCommandHeader.swift
 //  HelmCode
 //
-//  Cursor-like agent chat header: session title, phase chip, new/stop/unrevert.
+//  Cursor-like agent chat header: session title, phase chip, new/stop.
 //
 
 import SwiftUI
@@ -18,7 +18,6 @@ struct AgentCommandHeader: View {
                 sessionButton
                 Spacer(minLength: 4)
                 phaseChip
-                unrevertButton
                 trailingAction
             } else {
                 Text("Agent")
@@ -55,22 +54,6 @@ struct AgentCommandHeader: View {
         }
         .buttonStyle(.plain)
         .disabled(!agent.socketState.isReady)
-    }
-
-    @ViewBuilder
-    private var unrevertButton: some View {
-        if agent.canUnrevert, !agent.phase.isBusy {
-            Button {
-                Task { await agent.unrevertLast() }
-            } label: {
-                Image(systemName: "arrow.uturn.forward")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Undo restore")
-            .help("Undo last checkpoint restore")
-        }
     }
 
     @ViewBuilder

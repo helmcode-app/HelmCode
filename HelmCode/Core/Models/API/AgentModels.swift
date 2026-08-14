@@ -155,6 +155,21 @@ enum AgentComposerMode: String, CaseIterable, Identifiable, Sendable {
         case .ask: return "Ask about this codebase…"
         }
     }
+
+    /// Modes the composer should offer. Ask is hidden unless the harness advertised it.
+    static func available(advertised: [String]) -> [AgentComposerMode] {
+        let ids = Set(advertised.map { $0.lowercased() })
+        return allCases.filter { mode in
+            switch mode {
+            case .agent:
+                return true
+            case .plan:
+                return ids.isEmpty || ids.contains("plan")
+            case .ask:
+                return ids.contains("ask")
+            }
+        }
+    }
 }
 
 /// Selectable model labels for the composer (`provider/model` for `/v1/sessions` prompt).
@@ -167,10 +182,10 @@ struct AgentModelOption: Identifiable, Hashable, Sendable {
 
     /// Fallback when runner catalog is unavailable.
     static let fallbackCatalog: [AgentModelOption] = [
-        .init(id: "opencode/big-pickle", title: "Big Pickle", subtitle: "OpenCode"),
+        .init(id: "opencode-go/glm-5.1", title: "glm-5.1", subtitle: "opencode-go"),
     ]
 
-    static let defaultID = "opencode/big-pickle"
+    static let defaultID = "opencode-go/glm-5.1"
 
     /// Wire id shown under the title in lists (`opencode-go/glm-5.1`).
     var wireID: String { id }
@@ -180,14 +195,14 @@ struct AgentModelOption: Identifiable, Hashable, Sendable {
     }
 
     static func fromDTO(_ dto: SessionModelDTO) -> AgentModelOption {
-        AgentModelOption(id: dto.id, title: dto.title, subtitle: dto.provider)
+        AgentModelOption(id: dto.id, title: dto.name, subtitle: dto.provider)
     }
 
     static func fromResponse(_ response: SessionModelsResponse) -> [AgentModelOption] {
         response.models.map(fromDTO)
     }
 
-    /// Prefer Go → Zen free → first available (matches runner catalog defaults).
+    /// Prefer the runner default, then the first catalog row (harness-agnostic).
     static func preferredDefaultID(
         in catalog: [AgentModelOption],
         serverDefault: String?
@@ -195,9 +210,7 @@ struct AgentModelOption: Identifiable, Hashable, Sendable {
         if let serverDefault, catalog.contains(where: { $0.id == serverDefault }) {
             return serverDefault
         }
-        return catalog.first(where: { $0.id.hasPrefix("opencode-go/") })?.id
-            ?? catalog.first(where: { $0.id.hasPrefix("opencode/") })?.id
-            ?? catalog.first?.id
+        return catalog.first?.id
     }
 
     /// Group by provider name, sorted for Settings lists.

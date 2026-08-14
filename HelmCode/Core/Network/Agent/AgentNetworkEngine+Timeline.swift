@@ -42,6 +42,7 @@ extension AgentNetworkEngine {
         }
 
         if let session = history.session {
+            applySessionMeta(session)
             switch session.status {
             case .failed:
                 if phase.isBusy,
@@ -82,11 +83,6 @@ extension AgentNetworkEngine {
         let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        // After Restore, OpenCode may still return these ids in history — keep them gone.
-        if suppressedTimelineIDs.contains(entry.id) {
-            return
-        }
-
         let role = (entry.role ?? "unknown").lowercased()
         let kind = (entry.kind ?? "message").lowercased()
         let stage: AgentEventStage
@@ -116,8 +112,8 @@ extension AgentNetworkEngine {
             }
         }
 
-        // Server echoes the user prompt: merge real `msg_…` id onto the optimistic
-        // local bubble so Restore checkpoint works without duplicating the row.
+        // Server echoes the user prompt: merge the real `user_…` id onto the
+        // optimistic local bubble so rewind works without duplicating the row.
         if stage == .userCommand,
            let idx = eventLog.firstIndex(where: {
                $0.stage == .userCommand && AgentTimelineBuilders.sameUserPrompt($0.message, text)

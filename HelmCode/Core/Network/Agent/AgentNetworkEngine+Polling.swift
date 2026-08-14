@@ -20,7 +20,7 @@ extension AgentNetworkEngine {
         let started = Date()
         // Agent turns with tools can run long; ask still benefits from a high ceiling.
         let maxWait: TimeInterval = 30 * 60
-        // OpenCode multi-step turns emit several assistant messages (think → tool → answer).
+        // Multi-step turns emit several assistant messages (think → tool → answer).
         // Require N consecutive polls with identical fingerprint + no pending work.
         let requiredStablePolls = 2
         let baseline = timelineIDsBeforeTurn

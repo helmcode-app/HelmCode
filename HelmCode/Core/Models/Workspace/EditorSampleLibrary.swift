@@ -26,7 +26,7 @@ enum EditorSampleLibrary {
                 }
 
                 public func submit(prompt: String) async throws -> String {
-                    // Pipeline: POST /v1/tasks → 202 → poll GET /v1/tasks/:id
+                    // Pipeline: POST /v1/sessions/:id/prompt → 202
                     return prompt
                 }
             }
@@ -44,7 +44,7 @@ enum EditorSampleLibrary {
               mode: HelmMode;
               version: string;
               uptimeMs: number;
-              activeTasks: number;
+              sessionsEnabled: boolean;
             }
             """
         }

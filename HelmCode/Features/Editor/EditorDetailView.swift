@@ -65,6 +65,7 @@ struct EditorDetailView: View {
                     projectID: project.id,
                     projectRunnerURL: project.normalizedRunnerURL ?? project.runnerBaseURL,
                     isVisible: showingTerminal,
+                    workspaceId: agent.workspaceId,
                     sessionEpoch: terminalSessionEpoch,
                     onSessionEnded: handleShellExit,
                     onHide: hideTerminal

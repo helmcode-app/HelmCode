@@ -151,7 +151,8 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
         evaluate(
             TerminalBundle.connectJavaScript(
                 baseURL: parent.baseURLString,
-                token: parent.apiToken
+                token: parent.apiToken,
+                workspaceId: parent.workspaceId
             )
         )
         scheduleFocus(delays: [0.08, 0.25, 0.5])
@@ -176,7 +177,7 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
     // MARK: - Private helpers
 
     private var connectionKey: String {
-        "\(parent.projectID)|\(parent.baseURLString)|\(parent.apiToken)"
+        "\(parent.projectID)|\(parent.baseURLString)|\(parent.apiToken)|\(parent.workspaceId)"
     }
 
     private func markSessionDead() {

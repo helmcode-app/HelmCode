@@ -17,6 +17,10 @@ struct AgentSessionDTO: Codable, Sendable, Equatable, Identifiable {
     let createdAt: String?
     let updatedAt: String?
     let backend: String?
+    /// ACP mode ids advertised at session/new (`build`, `plan`, …).
+    let modes: [String]?
+    /// Workspace this session edits (`default` = primary repo).
+    let workspaceId: String?
 }
 
 enum SessionStatusWire: String, Codable, Sendable {
@@ -42,6 +46,7 @@ enum SessionStatusWire: String, Codable, Sendable {
 
 struct CreateSessionBody: Encodable, Sendable {
     var title: String?
+    var workspaceId: String?
 }
 
 struct CreateSessionEnvelope: Decodable, Sendable {
@@ -93,9 +98,31 @@ struct SessionHistoryEnvelope: Codable, Sendable, Equatable {
     let entries: [SessionTimelineEntry]
 }
 
-struct SessionAbortResponse: Codable, Sendable, Equatable {
+struct SessionCancelResponse: Codable, Sendable, Equatable {
     let sessionId: String
-    let aborted: Bool
+    let cancelled: Bool
+}
+
+enum SessionRewindRestore: String, Codable, Sendable {
+    case both
+    case conversation
+    case code
+}
+
+struct SessionRewindBody: Encodable, Sendable {
+    var messageId: String
+    var restore: SessionRewindRestore?
+}
+
+struct SessionRewindResponse: Codable, Sendable, Equatable {
+    let sessionId: String
+    let messageId: String
+    let restore: SessionRewindRestore
+    let prompt: String
+    let session: AgentSessionDTO
+    let truncated: Int
+    let filesRestored: Bool
+    let entries: [SessionTimelineEntry]
 }
 
 struct SessionDeleteResponse: Codable, Sendable, Equatable {
@@ -103,72 +130,25 @@ struct SessionDeleteResponse: Codable, Sendable, Equatable {
     let deleted: Bool
 }
 
-struct SessionRevertBody: Encodable, Sendable {
-    var messageId: String
-}
-
-struct SessionRevertResponse: Codable, Sendable, Equatable {
-    let sessionId: String
-    let reverted: Bool?
-    let unreverted: Bool?
-    let session: AgentSessionDTO?
-}
-
-struct SessionDiffResponse: Codable, Sendable, Equatable {
-    let sessionId: String
-    let diffs: [SessionFileDiff]
-}
-
-struct SessionFileDiff: Codable, Sendable, Equatable, Identifiable {
-    var id: String { path }
-    let path: String
-    let additions: Int?
-    let deletions: Int?
-    let status: String?
-
-    enum CodingKeys: String, CodingKey {
-        case path, file, additions, deletions, status, before, after
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        path =
-            (try? c.decode(String.self, forKey: .path))
-            ?? (try? c.decode(String.self, forKey: .file))
-            ?? "file"
-        additions = try? c.decode(Int.self, forKey: .additions)
-        deletions = try? c.decode(Int.self, forKey: .deletions)
-        status = try? c.decode(String.self, forKey: .status)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(path, forKey: .path)
-        try c.encodeIfPresent(additions, forKey: .additions)
-        try c.encodeIfPresent(deletions, forKey: .deletions)
-        try c.encodeIfPresent(status, forKey: .status)
-    }
-}
-
 struct SessionsRuntimeHealth: Codable, Sendable, Equatable {
     let ok: Bool
     let provider: String?
     let version: String?
     let error: String?
-    /// Present when OPENCODE_MANAGED (object or bool depending on path).
-    // Ignore `managed` shape for decode flexibility — use ok only.
+    let harness: String?
 }
 
 // MARK: - Models catalog (GET /v1/sessions/models)
 
 struct SessionModelDTO: Codable, Sendable, Equatable, Identifiable, Hashable {
     let id: String
-    let title: String
+    let name: String
     let provider: String
+    let connected: Bool?
 }
 
 struct SessionModelsResponse: Codable, Sendable, Equatable {
     let models: [SessionModelDTO]
-    let `default`: String?
+    let defaultModel: String?
     let connected: [String]?
 }

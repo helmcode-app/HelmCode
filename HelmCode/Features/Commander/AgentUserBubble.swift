@@ -2,7 +2,7 @@
 //  AgentUserBubble.swift
 //  HelmCode
 //
-//  User chat bubble: content on top; time + Restore on the bottom row.
+//  User chat bubble: content on top; time + Rewind on the bottom row.
 //
 
 import SwiftUI
@@ -12,20 +12,20 @@ import UIKit
 
 struct AgentUserBubble: View {
     let entry: EventLog
-    /// Called after the user confirms restore (message id already validated).
-    var onConfirmRevert: ((String) -> Void)?
+    /// Called after the user confirms rewind (server `user_…` id).
+    var onConfirmRewind: ((String) -> Void)?
 
     @State private var showRestoreConfirm = false
 
     private var messageId: String? {
-        guard let mid = entry.detail?["timelineId"]?.stringValue, mid.hasPrefix("msg") else {
+        guard let mid = entry.detail?["timelineId"]?.stringValue, !mid.isEmpty else {
             return nil
         }
         return mid
     }
 
-    private var canShowRevert: Bool {
-        messageId != nil && onConfirmRevert != nil
+    private var canShowRewind: Bool {
+        messageId != nil && onConfirmRewind != nil
     }
 
     private var timeText: String {
@@ -53,7 +53,7 @@ struct AgentUserBubble: View {
                             .foregroundStyle(.tertiary)
                     }
                     Spacer(minLength: 0)
-                    if canShowRevert {
+                    if canShowRewind {
                         Button {
                             showRestoreConfirm = true
                         } label: {
@@ -64,8 +64,8 @@ struct AgentUserBubble: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Restore checkpoint")
-                        .help("Restore: remove this message and after, put text back in the composer")
+                        .accessibilityLabel("Rewind to this message")
+                        .help("Rewind: drop this message and after, restore files, put the text back in the composer")
                     }
                 }
             }
@@ -76,28 +76,28 @@ struct AgentUserBubble: View {
                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
             .confirmationDialog(
-                "Restore checkpoint?",
+                "Rewind to this message?",
                 isPresented: $showRestoreConfirm,
                 titleVisibility: .visible
             ) {
-                Button("Restore", role: .destructive) {
+                Button("Rewind chat and files", role: .destructive) {
                     if let mid = messageId {
-                        onConfirmRevert?(mid)
+                        onConfirmRewind?(mid)
                     }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Removes this message and everything after, undoes file changes, and puts the text back in the input.")
+                Text("Removes this message and everything after, restores the workspace to that checkpoint, and puts the text back in the input. This cannot be undone.")
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
         .contextMenu {
-            if canShowRevert {
+            if canShowRewind {
                 Button(role: .destructive) {
                     showRestoreConfirm = true
                 } label: {
-                    Label("Restore to this message", systemImage: "arrow.uturn.backward.circle")
+                    Label("Rewind to this message", systemImage: "arrow.uturn.backward.circle")
                 }
             }
             Button {

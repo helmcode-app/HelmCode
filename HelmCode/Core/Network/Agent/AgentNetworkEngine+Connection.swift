@@ -38,9 +38,10 @@ extension AgentNetworkEngine {
                         self.phase = .ready
                     }
                     self.log.info("Agent sessions ready")
+                    await self.refreshWorkspaces()
                     await self.refreshModelCatalog()
                     await self.refreshSessionList()
-                    // Restore a non-empty OpenCode session so the timeline is not blank.
+                    // Restore a non-empty session so the timeline is not blank.
                     await self.restoreSessionTimelineIfNeeded()
                 } else {
                     let message = health.error ?? "sessions runtime not healthy"
@@ -106,7 +107,7 @@ extension AgentNetworkEngine {
         }
     }
 
-    /// Pull models available for currently authenticated OpenCode providers.
+    /// Pull models available for the connected harness providers.
     /// Only publishes when the id set changes — prevents Menu/sheet scroll jumps.
     func refreshModelCatalog(force: Bool = false) async {
         if modelCatalogLoaded, !force { return }
@@ -120,7 +121,7 @@ extension AgentNetworkEngine {
             if newIDs != oldIDs || force {
                 modelCatalog = mapped
                 log.info(
-                    "loaded \(mapped.count, privacy: .public) session models; default=\(response.default ?? "-", privacy: .public)"
+                    "loaded \(mapped.count, privacy: .public) session models; default=\(response.defaultModel ?? "-", privacy: .public)"
                 )
             }
             modelCatalogLoaded = true
@@ -128,7 +129,7 @@ extension AgentNetworkEngine {
             if !mapped.contains(where: { $0.id == modelID }) {
                 modelID = AgentModelOption.preferredDefaultID(
                     in: mapped,
-                    serverDefault: response.default
+                    serverDefault: response.defaultModel
                 ) ?? mapped[0].id
             }
         } catch {

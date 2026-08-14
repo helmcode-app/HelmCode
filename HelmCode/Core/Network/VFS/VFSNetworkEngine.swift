@@ -52,6 +52,14 @@ final class VFSNetworkEngine: ObservableObject {
 
     /// Optional root override for `vfs/initialize` (nil = server default `MAIN_REPO_PATH`).
     var initializeRoot: String?
+    /// Workspace bound to this VFS socket (`?workspaceId=`).
+    var workspaceId: String = HelmWorkspace.defaultID {
+        didSet {
+            if workspaceId != oldValue, wantsRunning {
+                reconnectNow(reason: "workspace changed")
+            }
+        }
+    }
 
     // MARK: - Internals
 
@@ -330,7 +338,7 @@ final class VFSNetworkEngine: ObservableObject {
     }
 
     private func makeWebSocketURL() -> URL? {
-        RunnerURL.webSocketVFSURL(fromBase: baseURLString)
+        RunnerURL.webSocketVFSURL(fromBase: baseURLString, workspaceId: workspaceId)
     }
 
     // MARK: - Receive

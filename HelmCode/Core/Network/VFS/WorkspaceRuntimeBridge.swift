@@ -78,6 +78,7 @@ enum WorkspaceRuntimeBridge {
                 agent: agent
             )
             await engine.checkBackendHealth()
+            vfs.workspaceId = agent.workspaceId
             vfs.start()
             agent.bindToProjectRunner(from: engine)
             return
@@ -85,6 +86,7 @@ enum WorkspaceRuntimeBridge {
 
         BackendConnectionSync.syncVFS(from: engine, to: vfs)
         BackendConnectionSync.syncAgent(from: engine, to: agent)
+        vfs.workspaceId = agent.workspaceId
 
         if !vfs.connectionState.isReady {
             await engine.checkBackendHealth()

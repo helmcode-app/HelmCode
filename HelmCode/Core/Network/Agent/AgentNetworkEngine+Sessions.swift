@@ -2,7 +2,7 @@
 //  AgentNetworkEngine+Sessions.swift
 //  HelmCode
 //
-//  Session list, create/select/delete, revert/unrevert, and restore helpers.
+//  Session list, create/select/delete, and restore helpers.
 //  Prompt launch is in +Launch; history poll in +Polling.
 //
 
@@ -26,20 +26,22 @@ extension AgentNetworkEngine {
         }
     }
 
-    /// Start a fresh chat (new OpenCode session).
+    /// Start a fresh chat (new agent session).
     func startNewChat() async {
         guard !phase.isBusy else { return }
         stopPolling()
         sessionID = nil
         sessionTitle = nil
-        canUnrevert = false
-        suppressedTimelineIDs = []
         resetSession()
         do {
-            let session = try await api.createSession(title: "New chat")
+            let session = try await api.createSession(
+                title: "New chat",
+                workspaceId: workspaceId
+            )
             sessionID = session.id
             sessionTitle = session.title ?? "New chat"
             activeTaskID = session.id
+            applySessionMeta(session)
             await refreshSessionList()
             log.info("new chat sessionId=\(session.id, privacy: .public)")
         } catch {
@@ -54,8 +56,6 @@ extension AgentNetworkEngine {
         guard id != sessionID else { return }
         stopPolling()
         sessionID = id
-        canUnrevert = false
-        suppressedTimelineIDs = []
         result = nil
         lastError = nil
         pollStatus = nil
@@ -65,6 +65,9 @@ extension AgentNetworkEngine {
         timelineIDsBeforeTurn = []
         activeTaskID = id
         sessionTitle = sessions.first(where: { $0.id == id })?.title
+        if let listed = sessions.first(where: { $0.id == id }) {
+            applySessionMeta(listed)
+        }
         do {
             let history = try await api.sessionHistory(id: id, limit: 200)
             applyHistory(history, forDisplay: true)
@@ -75,7 +78,7 @@ extension AgentNetworkEngine {
         }
     }
 
-    /// Delete a chat from history (OpenCode session delete).
+    /// Delete a chat from history.
     func deleteSession(id: String) async {
         guard !phase.isBusy else { return }
         let wasActive = sessionID == id || activeTaskID == id
@@ -85,89 +88,10 @@ extension AgentNetworkEngine {
             if wasActive {
                 sessionID = nil
                 sessionTitle = nil
-                canUnrevert = false
-                suppressedTimelineIDs = []
                 resetSession()
             }
             await refreshSessionList()
             log.info("deleted sessionId=\(id, privacy: .public)")
-        } catch {
-            lastError = mapError(error)
-        }
-    }
-
-    /// Roll back workspace + chat to a message (`msg_…` id from timeline detail).
-    ///
-    /// Cursor-style restore:
-    /// 1. Capture that user message → put it back in the composer
-    /// 2. OpenCode revert (file + server history effects)
-    /// 3. Drop that message and every timeline row after it locally
-    /// 4. Remember suppressed ids so a later history reload does not resurrect them
-    func revertToMessage(messageId: String) async {
-        guard let sid = sessionID ?? activeTaskID else { return }
-        guard !phase.isBusy else { return }
-        let mid = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard mid.hasPrefix("msg") else {
-            lastError = "Cannot revert: missing message id"
-            return
-        }
-
-        // Snapshot prompt text + which rows we will hide (before server changes).
-        let restorePrompt = promptTextForRestore(messageId: mid)
-        let idsToSuppress = timelineIDsFromMessageOnward(messageId: mid, inclusive: true)
-
-        do {
-            _ = try await api.revertSession(id: sid, messageId: mid)
-            canUnrevert = true
-            result = nil
-            lastError = nil
-            pollStatus = nil
-            stopPolling()
-
-            // Persist suppress set *before* reloading — OpenCode often still returns
-            // reverted messages in GET history, and the next send reloads prior history.
-            suppressedTimelineIDs.formUnion(idsToSuppress)
-            suppressedTimelineIDs.insert(mid)
-
-            seenTimelineIDs = []
-            eventLog = []
-            eventSequence = 0
-            timelineIDsBeforeTurn = []
-            let history = try await api.sessionHistory(id: sid, limit: 200)
-            applyHistory(history, forDisplay: true)
-            // Belt-and-suspenders if server still has the cut message.
-            trimTimelineFromMessage(messageId: mid, inclusive: true)
-
-            if let restorePrompt, !restorePrompt.isEmpty {
-                prompt = restorePrompt
-            }
-
-            settleIdleAfterRestore()
-            await refreshSessionList()
-            log.info(
-                "reverted sessionId=\(sid, privacy: .public) messageId=\(mid, privacy: .public) suppressed=\(self.suppressedTimelineIDs.count, privacy: .public)"
-            )
-        } catch {
-            lastError = mapError(error)
-            phase = .failed(mapError(error))
-        }
-    }
-
-    /// Undo the last revert (OpenCode unrevert).
-    func unrevertLast() async {
-        guard let sid = sessionID ?? activeTaskID else { return }
-        guard !phase.isBusy else { return }
-        do {
-            _ = try await api.unrevertSession(id: sid)
-            canUnrevert = false
-            suppressedTimelineIDs = []
-            seenTimelineIDs = []
-            eventLog = []
-            eventSequence = 0
-            let history = try await api.sessionHistory(id: sid, limit: 200)
-            applyHistory(history, forDisplay: true)
-            settleIdleAfterRestore()
-            await refreshSessionList()
         } catch {
             lastError = mapError(error)
         }
@@ -184,8 +108,12 @@ extension AgentNetworkEngine {
             sessionID = existing
             return existing
         }
-        let session = try await api.createSession(title: "HelmCode")
+        let session = try await api.createSession(
+            title: "HelmCode",
+            workspaceId: workspaceId
+        )
         sessionID = session.id
+        applySessionMeta(session)
         return session.id
     }
 
@@ -256,67 +184,64 @@ extension AgentNetworkEngine {
         session.updatedAt ?? session.createdAt ?? session.id
     }
 
-    // MARK: - Revert helpers
-
-    /// Plain user prompt for a timeline id (strips Context: chrome).
-    func promptTextForRestore(messageId: String) -> String? {
-        guard let entry = eventLog.first(where: {
-            $0.stage == .userCommand
-                && $0.detail?["timelineId"]?.stringValue == messageId
-        }) else { return nil }
-        if let raw = entry.detail?["prompt"]?.stringValue?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !raw.isEmpty {
-            return raw
+    func applySessionMeta(_ session: AgentSessionDTO) {
+        if let modes = session.modes {
+            advertisedModes = modes
         }
-        return AgentTimelineBuilders.normalizeUserPrompt(entry.message)
+        if let wid = session.workspaceId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !wid.isEmpty {
+            workspaceId = wid
+        }
+        if !availableComposerModes.contains(composerMode) {
+            composerMode = .agent
+        }
     }
 
-    /// All timeline ids from `messageId` onward (for suppress set).
-    func timelineIDsFromMessageOnward(messageId: String, inclusive: Bool) -> Set<String> {
-        guard let idx = eventLog.firstIndex(where: {
-            $0.detail?["timelineId"]?.stringValue == messageId
-        }) else {
-            return [messageId]
+    /// Bind to the runner's default workspace (VFS / terminal follow this id).
+    func refreshWorkspaces() async {
+        do {
+            let envelope = try await api.listWorkspaces()
+            let id = (envelope.defaultWorkspaceId ?? HelmWorkspace.defaultID)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !id.isEmpty {
+                workspaceId = id
+            }
+        } catch {
+            log.debug("listWorkspaces soft-fail: \(error.localizedDescription, privacy: .public)")
         }
-        let start = inclusive ? idx : eventLog.index(after: idx)
-        guard start < eventLog.endIndex else { return inclusive ? [messageId] : [] }
-        var ids = Set(
-            eventLog[start...].compactMap { $0.detail?["timelineId"]?.stringValue }
-                .filter { !$0.isEmpty }
-        )
-        if inclusive { ids.insert(messageId) }
-        return ids
     }
 
-    /// Drop `messageId` and every eventLog row after it (local UI only).
-    func trimTimelineFromMessage(messageId: String, inclusive: Bool) {
-        guard let idx = eventLog.firstIndex(where: {
-            $0.detail?["timelineId"]?.stringValue == messageId
-        }) else {
-            return
+    /// Rewind to a user-message checkpoint (chat + files by default).
+    func rewindToMessage(_ messageId: String, restore: SessionRewindRestore = .both) async {
+        guard !phase.isBusy else { return }
+        guard let sid = sessionID else { return }
+        do {
+            let result = try await api.rewindSession(
+                id: sid,
+                messageId: messageId,
+                restore: restore
+            )
+            stopPolling()
+            seenTimelineIDs = []
+            eventLog = []
+            eventSequence = 0
+            timelineIDsBeforeTurn = []
+            applyHistory(
+                SessionHistoryEnvelope(
+                    sessionId: result.sessionId,
+                    session: result.session,
+                    entries: result.entries
+                ),
+                forDisplay: true
+            )
+            prompt = result.prompt
+            settleIdleAfterRestore()
+            await refreshSessionList()
+            log.info(
+                "rewound sessionId=\(result.sessionId, privacy: .public) messageId=\(result.messageId, privacy: .public) restore=\(result.restore.rawValue, privacy: .public) files=\(result.filesRestored, privacy: .public)"
+            )
+        } catch {
+            lastError = mapError(error)
         }
-        let cut = inclusive ? idx : eventLog.index(after: idx)
-        guard cut <= eventLog.endIndex else { return }
-        let kept = Array(eventLog[..<cut])
-        let removedIDs = Set(
-            eventLog[cut...].compactMap { $0.detail?["timelineId"]?.stringValue }
-        )
-        var dropIDs = removedIDs
-        if inclusive {
-            dropIDs.insert(messageId)
-        }
-
-        eventLog = kept
-        seenTimelineIDs.subtract(dropIDs)
-        suppressedTimelineIDs.formUnion(dropIDs)
-        timelineIDsBeforeTurn = Set(
-            eventLog.compactMap { $0.detail?["timelineId"]?.stringValue }
-                .filter { !$0.isEmpty }
-        )
-        eventSequence = eventLog.count
-        phase = socketState.isReady ? .ready : .idle
-        result = nil
-        pollStatus = nil
     }
 }

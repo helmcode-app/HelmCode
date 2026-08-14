@@ -123,7 +123,7 @@ struct AgentCommandComposer: View {
             systemImage: agent.composerMode.systemImage,
             disabled: composerDisabled
         ) {
-            ForEach(AgentComposerMode.allCases) { mode in
+            ForEach(agent.availableComposerModes) { mode in
                 Button {
                     agent.composerMode = mode
                 } label: {

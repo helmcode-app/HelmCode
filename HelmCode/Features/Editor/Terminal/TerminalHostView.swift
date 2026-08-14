@@ -12,6 +12,7 @@ import WebKit
 struct TerminalHostView: UIViewRepresentable {
     var baseURLString: String
     var apiToken: String
+    var workspaceId: String = HelmWorkspace.defaultID
     var projectID: String
     var isDark: Bool
     var reconnectGeneration: UInt64 = 0

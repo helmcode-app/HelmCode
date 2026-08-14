@@ -13,7 +13,7 @@ HelmCode/
 │   │   └── Workspace/        # tree, search, SCM, language hints
 │   ├── Network/
 │   │   ├── …                 # HTTP client, RunnerURL, BackendConnectionSync
-│   │   ├── Agent/            # /v1/agent WebSocket JSON-RPC engine
+│   │   ├── Agent/            # /v1/sessions REST + history poll
 │   │   └── VFS/              # /v1/vfs WebSocket transport + stream
 │   ├── Preferences/          # AppStorage keys, layout metrics
 │   └── Session/              # WorkspaceSession (+ Persistence / Tree / VFS / …)
@@ -119,23 +119,20 @@ Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see ru
 |-------|------|
 | `GET /health` | Mode + liveness |
 | `GET /v1/status` | Runtime snapshot |
-| `POST /v1/tasks` | Async submit → `202` (legacy HTTP path) |
-| `GET /v1/tasks/:id` | Poll status / events / result |
-| `POST /v1/tasks/:id/cancel` | Cancel |
-| `WS /v1/agent` | **Agent command panel** — `agent/run` + progress stream |
-| `WS /v1/vfs` | Workspace tree / chunked read / write |
-| `WS /v1/terminal` | **WebSSH** — xterm.js PTY (Docker exec); enable `TERMINAL_ENABLED` |
+| `GET /v1/workspaces` | Workspace catalog (`default` = primary repo) |
+| `*` `/v1/sessions/*` | **Agent command panel** — REST + SSE |
+| `WS /v1/vfs` | Workspace tree / chunked read / write (`?workspaceId=`) |
+| `WS /v1/terminal` | **WebSSH** — xterm.js PTY (`?workspaceId=`) |
 
-### Agent Commander (inspector)
+### Agent Commander
 
 | Component | Role |
 |-----------|------|
-| `AgentCommandPanel` | Shell: header + timeline + safe-area composer dock |
-| `AgentCommandComposer` | Prompt / branch / mode / model / send (glass dock) |
-| `AgentTimelineView` | Session scroll list (`EventLog`); nodes in `AgentTimelineNodes` |
-| `AgentTimelineBuilders` | Local “YOU” command event construction |
-| `AgentNetworkEngine` | `URLSessionWebSocketTask` JSON-RPC + controller state machine |
-| `AgentJSONRPC` | Wire envelopes / socket state / errors (`Core/Network/Agent/`) |
+| `AgentCommandPanel` | Shell: header + timeline + composer dock |
+| `AgentCommandComposer` | Prompt / branch / mode / model / send |
+| `AgentTimelineView` | Session scroll list (`EventLog`) |
+| `AgentNetworkEngine` | `/v1/sessions` client (create / prompt / history / cancel / rewind) |
+| `HelmCodeNetworkEngine` | `GET /health` + `GET /v1/status` probe only |
 
 Optional Bearer (`OPENCORE_API_TOKEN`): enter when **Open Project → Self-hosted** (stored for reopens; not a separate Settings backend).
 

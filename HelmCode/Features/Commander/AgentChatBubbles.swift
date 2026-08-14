@@ -7,7 +7,7 @@
 //    AgentTranscriptItem.swift   — group EventLog → user / agent turns
 //    AgentTurnContent.swift      — pure partition thought / tools / answer
 //    AgentToolAction.swift       — tool row model + parse/dedupe
-//    AgentUserBubble.swift       — user message + restore
+//    AgentUserBubble.swift       — user message + rewind
 //    AgentTurnCard.swift         — agent turn layout
 //    AgentToolRow.swift          — tool row expand/collapse
 //    AgentProcessingBanner.swift — composer “working” strip

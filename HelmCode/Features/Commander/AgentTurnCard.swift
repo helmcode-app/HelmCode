@@ -15,7 +15,6 @@ struct AgentTurnCard: View {
     let parts: [EventLog]
     /// Show green Done on the Worked-for row (only the latest completed turn).
     var showDone: Bool = false
-    var onUndoRestore: (() -> Void)? = nil
 
     @State private var thoughtExpanded = false
     @State private var expandedToolIDs: Set<String> = []
@@ -160,10 +159,6 @@ struct AgentTurnCard: View {
                 .contentTransition(.numericText())
             Spacer(minLength: 8)
             if showDone, !isRunning {
-                if let onUndoRestore {
-                    Button("Undo restore", action: onUndoRestore)
-                        .font(.caption.weight(.semibold))
-                }
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)

@@ -33,7 +33,7 @@ See `runner-core/docs/api/terminal.md`:
 
 | Item | Value |
 |------|--------|
-| Endpoint | `ws(s)://<runner>/v1/terminal?cols=&rows=&token=` |
+| Endpoint | `ws(s)://<runner>/v1/terminal?cols=&rows=&token=&workspaceId=` |
 | Binary frames | PTY stdin / stdout |
 | Text JSON | `resize` · `ping` / `pong` · `ready` · `error` · `exit` |
 

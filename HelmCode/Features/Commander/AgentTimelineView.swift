@@ -3,7 +3,6 @@
 //  HelmCode
 //
 //  Cursor-style chat transcript: user bubbles + grouped agent turn cards.
-//  Restore checkpoint only on user messages (confirm anchored to that bubble).
 //
 
 import SwiftUI
@@ -36,9 +35,11 @@ struct AgentTimelineView: View {
                             case .user(let entry):
                                 AgentUserBubble(
                                     entry: entry,
-                                    onConfirmRevert: { mid in
-                                        Task { await agent.revertToMessage(messageId: mid) }
-                                    }
+                                    onConfirmRewind: agent.phase.isBusy
+                                        ? nil
+                                        : { mid in
+                                            Task { await agent.rewindToMessage(mid) }
+                                        }
                                 )
                                 .id(item.id)
                             case .agentTurn(_, let parts):
@@ -46,10 +47,7 @@ struct AgentTimelineView: View {
                                 let isLatestTurn = item.id == lastAgentTurnID
                                 AgentTurnCard(
                                     parts: parts,
-                                    showDone: isLatestTurn && agent.phase == .succeeded,
-                                    onUndoRestore: isLatestTurn && agent.canUnrevert
-                                        ? { Task { await agent.unrevertLast() } }
-                                        : nil
+                                    showDone: isLatestTurn && agent.phase == .succeeded
                                 )
                                 .id(item.id)
                             }

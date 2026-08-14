@@ -22,20 +22,6 @@ enum HelmMode: String, Codable, Sendable, CaseIterable, Identifiable {
         case .commercialSaaS: return "Commercial SaaS"
         }
     }
-
-    var concurrentTaskLimit: Int {
-        switch self {
-        case .openCore: return 4
-        case .commercialSaaS: return 12
-        }
-    }
-
-    var promptCharacterLimit: Int {
-        switch self {
-        case .openCore: return 8_000
-        case .commercialSaaS: return 32_000
-        }
-    }
 }
 
 /// Full agent lifecycle — poll `status` + event `status`.
@@ -67,93 +53,24 @@ struct HealthCheck: Codable, Sendable, Equatable {
     let mode: HelmMode
     let version: String
     let uptimeMs: Int
-    /// Legacy pipeline field (removed server-side); default 0 when absent.
-    let activeTasks: Int?
-    /// Product agent sessions surface is enabled (`OPENCODE_ENABLED`).
     let sessionsEnabled: Bool?
-
-    var activeTaskCount: Int { activeTasks ?? 0 }
 }
 
 /// `GET /v1/status`
 struct RuntimeStatus: Codable, Sendable, Equatable {
     let mode: HelmMode
     let version: String
-    let activeTasks: Int?
-    let knownTasks: Int?
     let authRequired: Bool?
     let sessionsEnabled: Bool?
     let sessionsManaged: Bool?
+    let agentHarness: String?
+    let agentTransport: String?
     let vfsEnabled: Bool?
     let terminalEnabled: Bool?
-
-    var activeTaskCount: Int { activeTasks ?? 0 }
+    let defaultWorkspaceId: String?
 }
 
-// MARK: - Task request / accept
-
-/// `POST /v1/tasks` and `POST /v1/tasks/sync` (`OpenCoreSubmitBody`).
-struct TaskRequest: Codable, Sendable, Equatable {
-    var prompt: String
-    var id: String?
-    var baseBranch: String?
-    var testCommand: String?
-    var contextPaths: [String]?
-    var timeoutMs: Int?
-    var metadata: [String: JSONValue]?
-
-    init(
-        prompt: String,
-        id: String? = nil,
-        baseBranch: String? = nil,
-        testCommand: String? = nil,
-        contextPaths: [String]? = nil,
-        timeoutMs: Int? = nil,
-        metadata: [String: JSONValue]? = nil
-    ) {
-        self.prompt = prompt
-        self.id = id
-        self.baseBranch = baseBranch
-        self.testCommand = testCommand
-        self.contextPaths = contextPaths
-        self.timeoutMs = timeoutMs
-        self.metadata = metadata
-    }
-
-    static func commander(
-        prompt: String,
-        baseBranch: String = "main",
-        contextPaths: [String] = []
-    ) -> TaskRequest {
-        TaskRequest(
-            prompt: prompt,
-            baseBranch: baseBranch,
-            contextPaths: contextPaths.isEmpty ? nil : contextPaths,
-            metadata: [
-                "source": .string("helmcode-ipad"),
-                "client": .string("HelmCode"),
-            ]
-        )
-    }
-}
-
-/// `202 Accepted` from `POST /v1/tasks`
-struct TaskAcceptedResponse: Codable, Sendable, Equatable {
-    let id: String
-    let status: TaskStatus
-    let poll: String
-    let cancel: String?
-}
-
-// MARK: - Poll / result
-
-/// `GET /v1/tasks/:id`
-struct TaskPollResponse: Codable, Sendable, Equatable {
-    let id: String
-    let status: TaskStatus
-    let result: AgentResult?
-    let events: [TaskProgressEvent]
-}
+// MARK: - Timeline / result (session history → EventLog)
 
 struct AgentResult: Codable, Sendable, Equatable, Identifiable {
     var id: String { taskId }
@@ -227,12 +144,6 @@ struct TaskProgressEvent: Codable, Sendable, Equatable, Identifiable {
             ?? ISO8601DateFormatter.helmNoFraction.date(from: at)
             ?? .distantPast
     }
-}
-
-struct TaskCancelResponse: Codable, Sendable, Equatable {
-    let id: String
-    let status: TaskStatus
-    let message: String
 }
 
 struct APIErrorBody: Codable, Sendable, Equatable {

@@ -7,8 +7,8 @@
 //  File map (same type, split by concern):
 //    AgentNetworkEngine.swift            — state, lifecycle, context paths, helpers
 //    AgentNetworkEngine+Connection.swift — health, reconnect, model catalog
-//    AgentNetworkEngine+Sessions.swift   — list / create / select / delete / revert
-//    AgentNetworkEngine+Launch.swift     — prompt launch + abort
+//    AgentNetworkEngine+Sessions.swift   — list / create / select / delete
+//    AgentNetworkEngine+Launch.swift     — prompt launch + cancel
 //    AgentNetworkEngine+Polling.swift    — history poll + turn completion
 //    AgentNetworkEngine+Timeline.swift   — history → EventLog, synthetic rows
 //    AgentLinkState.swift                — socket state + engine errors
@@ -45,21 +45,23 @@ final class AgentNetworkEngine: ObservableObject {
     @Published var composerMode: AgentComposerMode = .agent
     /// Selected model id (`provider/model`, e.g. opencode-go/glm-5.1).
     @Published var modelID: String = AgentModelOption.defaultID
-    /// Live models for connected OpenCode providers (from GET /v1/sessions/models).
+    /// Live models from GET /v1/sessions/models (connected providers only).
     @Published var modelCatalog: [AgentModelOption] = AgentModelOption.fallbackCatalog
-    /// OpenCode sessions for the Cursor-style chat list.
+    /// Agent sessions for the Cursor-style chat list.
     @Published var sessions: [AgentSessionDTO] = []
     /// Active chat session title (from list / create).
     @Published var sessionTitle: String?
-    /// True after a revert while unrevert is still available.
-    @Published var canUnrevert = false
+    /// Workspace bound to VFS / terminal / new sessions.
+    @Published var workspaceId: String = HelmWorkspace.defaultID
+    /// ACP mode ids from the active session (`build`, `plan`, …). Empty until create/select.
+    @Published var advertisedModes: [String] = []
+
+    var availableComposerModes: [AgentComposerMode] {
+        AgentComposerMode.available(advertised: advertisedModes)
+    }
 
     /// Public id of the active chat (for UI).
     var activeSessionID: String? { sessionID }
-
-    /// Message ids dropped by Restore (OpenCode may still return them in history).
-    /// Filtered out on every history apply until unrevert / new chat / switch session.
-    var suppressedTimelineIDs: Set<String> = []
 
     // MARK: - Internals (shared across extensions)
 
@@ -160,6 +162,8 @@ final class AgentNetworkEngine: ObservableObject {
     func detachFromProject() {
         stop()
         sessionID = nil
+        advertisedModes = []
+        workspaceId = HelmWorkspace.defaultID
         if !phase.isBusy {
             resetSession()
             clearContextPaths()
@@ -203,7 +207,6 @@ final class AgentNetworkEngine: ObservableObject {
         seenTimelineIDs = []
         timelineIDsBeforeTurn = []
         // Keep sessionID so follow-up prompts reuse the conversation.
-        // Note: suppressedTimelineIDs is only cleared on new chat / switch / unrevert.
     }
 
     // MARK: - Shared helpers

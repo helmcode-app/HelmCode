@@ -240,7 +240,7 @@ struct ModelsSettingsView: View {
             let mapped = AgentModelOption.fromResponse(response)
             applyCatalog(mapped)
             if agentTargetsThisRunner, let agent {
-                agent.adoptModelCatalog(mapped, serverDefault: response.default)
+                agent.adoptModelCatalog(mapped, serverDefault: response.defaultModel)
             }
         } catch {
             loadError = error.localizedDescription

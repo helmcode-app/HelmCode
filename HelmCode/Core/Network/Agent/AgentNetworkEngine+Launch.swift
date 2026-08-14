@@ -90,7 +90,7 @@ extension AgentNetworkEngine {
     func cancelActiveTask() async {
         guard let sessionId = sessionID ?? activeTaskID else { return }
         do {
-            let _: SessionAbortResponse = try await api.abortSession(id: sessionId)
+            let _: SessionCancelResponse = try await api.cancelSession(id: sessionId)
             phase = .cancelled
             pollStatus = .cancelled
             appendSyntheticEvent(

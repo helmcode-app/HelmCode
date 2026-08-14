@@ -14,6 +14,8 @@ struct TerminalPanelView: View {
     var projectRunnerURL: String?
     /// Whether the terminal surface is visible (⌘J).
     var isVisible: Bool
+    /// Workspace for `/v1/terminal?workspaceId=` (same id as VFS / sessions).
+    var workspaceId: String = HelmWorkspace.defaultID
     /// Bumped when the open project changes / closes / shell exits.
     var sessionEpoch: UInt64
     /// Leave Terminal mode after remote `exit`.
@@ -40,6 +42,7 @@ struct TerminalPanelView: View {
             TerminalHostView(
                 baseURLString: runnerURL,
                 apiToken: engine.apiToken,
+                workspaceId: workspaceId,
                 projectID: projectID,
                 isDark: colorScheme == .dark,
                 reconnectGeneration: reconnectGeneration,

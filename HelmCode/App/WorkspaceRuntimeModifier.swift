@@ -32,6 +32,11 @@ struct WorkspaceRuntimeModifier: ViewModifier {
             .onChange(of: engine.apiToken) { _, _ in
                 syncEnginesAndStatus()
             }
+            .onChange(of: agent.workspaceId) { _, id in
+                if vfs.workspaceId != id {
+                    vfs.workspaceId = id
+                }
+            }
             .onChange(of: vfs.tree) { _, _ in
                 WorkspaceRuntimeBridge.applyTree(from: vfs, engine: engine, to: session)
                 refreshRunnerStatus()

@@ -28,12 +28,20 @@ enum TerminalBundle {
         return candidates.compactMap { $0 }.first
     }
 
-    static func configureJavaScript(baseURL: String, token: String) -> String {
-        call("configure", argsObject: connectionArgs(baseURL: baseURL, token: token))
+    static func configureJavaScript(
+        baseURL: String,
+        token: String,
+        workspaceId: String = HelmWorkspace.defaultID
+    ) -> String {
+        call("configure", argsObject: connectionArgs(baseURL: baseURL, token: token, workspaceId: workspaceId))
     }
 
-    static func connectJavaScript(baseURL: String, token: String) -> String {
-        call("connect", argsObject: connectionArgs(baseURL: baseURL, token: token))
+    static func connectJavaScript(
+        baseURL: String,
+        token: String,
+        workspaceId: String = HelmWorkspace.defaultID
+    ) -> String {
+        call("connect", argsObject: connectionArgs(baseURL: baseURL, token: token, workspaceId: workspaceId))
     }
 
     static var disconnectJavaScript: String { call("disconnect") }
@@ -51,8 +59,12 @@ enum TerminalBundle {
 
     // MARK: - Private
 
-    private static func connectionArgs(baseURL: String, token: String) -> String {
-        "{ baseURL: \(JSONFragment.string(baseURL)), token: \(JSONFragment.string(token)) }"
+    private static func connectionArgs(
+        baseURL: String,
+        token: String,
+        workspaceId: String
+    ) -> String {
+        "{ baseURL: \(JSONFragment.string(baseURL)), token: \(JSONFragment.string(token)), workspaceId: \(JSONFragment.string(workspaceId)) }"
     }
 
     private static func call(_ method: String, argsObject: String? = nil, rawArgs: String? = nil) -> String {

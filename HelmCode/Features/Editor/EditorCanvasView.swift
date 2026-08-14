@@ -188,13 +188,8 @@ struct EditorCanvasView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Text(engine.phase.label)
-                .foregroundStyle(engine.phase.isBusy ? Color.accentColor : .secondary)
-            if let id = engine.activeTaskID {
-                Text(id.prefix(8) + "…")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+            Text(engine.connectionState.shortTitle)
+                .foregroundStyle(engine.connectionState.isOnline ? Color.secondary : Color.orange)
         }
         .font(.caption2.monospaced())
         .foregroundStyle(.secondary)
