@@ -2,7 +2,7 @@
 //  AgentModelPickerSheet.swift
 //  HelmCode
 //
-//  Commander model picker sheet: curated list from Project Settings + live catalog.
+//  Commander model picker sheet: catalog + think level + fast.
 //
 
 import SwiftUI
@@ -17,26 +17,9 @@ struct AgentModelPickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if isLoading, snapshot.isEmpty {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-                } else if snapshot.isEmpty {
-                    ContentUnavailableView(
-                        "No Models",
-                        systemImage: "cpu",
-                        description: Text(
-                            "Enable models in Project Settings → Models, or wait for the runner catalog to load."
-                        )
-                    )
-                } else {
-                    ForEach(snapshot) { model in
-                        row(model)
-                    }
-                }
+                thinkLevelSection
+                fastSection
+                modelSection
             }
             .listStyle(.insetGrouped)
             .helmInlineNavigationTitle("Model")
@@ -48,15 +31,74 @@ struct AgentModelPickerSheet: View {
                 await reload()
             }
         }
-        .presentationDetents(snapshot.count > 12 ? [.medium, .large] : [.medium])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var modelSection: some View {
+        Section {
+            if isLoading, snapshot.isEmpty {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+            } else if snapshot.isEmpty {
+                ContentUnavailableView(
+                    "No Models",
+                    systemImage: "cpu",
+                    description: Text(
+                        "Enable models in Project Settings → Models, or wait for the runner catalog to load."
+                    )
+                )
+            } else {
+                ForEach(snapshot) { model in
+                    row(model)
+                }
+            }
+        } header: {
+            Text("Model")
+        }
+    }
+
+    private var thinkLevelSection: some View {
+        Section {
+            ForEach(AgentThinkLevel.allCases) { level in
+                SelectableListRow(selected: agent.thinkLevel == level) {
+                    agent.thinkLevel = level
+                } leading: {
+                    Text(level.title)
+                        .font(.body.weight(agent.thinkLevel == level ? .semibold : .regular))
+                }
+                .accessibilityLabel(level.title)
+            }
+        } header: {
+            Text("Think Level")
+        }
+    }
+
+    private var fastSection: some View {
+        Section {
+            ForEach([true, false], id: \.self) { on in
+                SelectableListRow(selected: agent.fastMode == on) {
+                    agent.fastMode = on
+                } leading: {
+                    Text(on ? "On" : "Off")
+                        .font(.body.weight(agent.fastMode == on ? .semibold : .regular))
+                }
+                .accessibilityLabel(on ? "Fast on" : "Fast off")
+            }
+        } header: {
+            Text("Fast")
+        }
     }
 
     private func row(_ model: AgentModelOption) -> some View {
         let selected = model.id == agent.modelID
         return SelectableListRow(selected: selected) {
             agent.modelID = model.id
-            isPresented = false
         } leading: {
             AgentModelIdentityLabel(
                 model: model,

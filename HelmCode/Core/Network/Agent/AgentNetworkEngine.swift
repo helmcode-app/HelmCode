@@ -45,6 +45,10 @@ final class AgentNetworkEngine: ObservableObject {
     @Published var composerMode: AgentComposerMode = .agent
     /// Selected model id (`provider/model`, e.g. opencode-go/glm-5.1).
     @Published var modelID: String = AgentModelOption.defaultID
+    /// Reasoning effort for the next prompt (`thinkLevel` on session prompt).
+    @Published var thinkLevel: AgentThinkLevel = .medium
+    /// Fast inference for the next prompt (`fast` on session prompt).
+    @Published var fastMode: Bool = false
     /// Live models from GET /v1/sessions/models (connected providers only).
     @Published var modelCatalog: [AgentModelOption] = AgentModelOption.fallbackCatalog
     /// Agent sessions for the Cursor-style chat list.
@@ -55,6 +59,8 @@ final class AgentNetworkEngine: ObservableObject {
     @Published var workspaceId: String = HelmWorkspace.defaultID
     /// ACP mode ids from the active session (`build`, `plan`, …). Empty until create/select.
     @Published var advertisedModes: [String] = []
+    /// Latest ACP `usage_update` for the active session (nil until the runner reports it).
+    @Published var sessionUsage: SessionUsage?
 
     var availableComposerModes: [AgentComposerMode] {
         AgentComposerMode.available(advertised: advertisedModes)
@@ -206,6 +212,7 @@ final class AgentNetworkEngine: ObservableObject {
         eventSequence = 0
         seenTimelineIDs = []
         timelineIDsBeforeTurn = []
+        sessionUsage = nil
         // Keep sessionID so follow-up prompts reuse the conversation.
     }
 

@@ -34,8 +34,15 @@ struct ModelsSettingsView: View {
         AgentModelOption.groupedByProvider(filteredCatalog)
     }
 
-    private var enabledCount: Int {
-        catalog.filter { enabledIDs.contains($0.id) }.count
+    /// Enabled / available, e.g. `Models 3/27`.
+    private var modelsTitle: String {
+        guard let label = EnabledModelsPrefs.enabledOverAvailableLabel(
+            catalog: catalog,
+            runnerURL: normalizedURL
+        ) else {
+            return "Models"
+        }
+        return "Models \(label)"
     }
 
     private var selectedModelID: String {
@@ -54,7 +61,7 @@ struct ModelsSettingsView: View {
             content
         }
         .searchable(text: $searchText, prompt: "Search models")
-        .helmInlineNavigationTitle("Models")
+        .helmInlineNavigationTitle(modelsTitle)
         .toolbar { overflowMenu }
         .overlay {
             if isLoading, !catalog.isEmpty {
@@ -101,7 +108,6 @@ struct ModelsSettingsView: View {
                 }
             }
         } else {
-            summarySection
             ForEach(grouped, id: \.provider) { group in
                 Section(group.provider) {
                     ForEach(group.models) { model in
@@ -109,18 +115,6 @@ struct ModelsSettingsView: View {
                     }
                 }
             }
-        }
-    }
-
-    private var summarySection: some View {
-        Section {
-            LabeledContent("Available", value: "\(catalog.count)")
-            LabeledContent(
-                "Enabled for Chat",
-                value: hasCuration ? "\(enabledCount)" : "All (\(catalog.count))"
-            )
-        } footer: {
-            Text(Copy.footer)
         }
     }
 
@@ -269,11 +263,6 @@ struct ModelsSettingsView: View {
         } else {
             enabledIDs = Set(mapped.map(\.id))
         }
-    }
-
-    private enum Copy {
-        static let footer =
-            "Enabled models appear in the Commander picker for this runner. Disable ones you rarely use to keep the list short."
     }
 }
 

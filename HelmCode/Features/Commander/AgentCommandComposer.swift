@@ -2,8 +2,8 @@
 //  AgentCommandComposer.swift
 //  HelmCode
 //
-//  Floating glass composer: branch · prompt · mode/model · send.
-//  Pieces: AgentComposerChipMenu, AgentComposerPromptEditor, AgentModelPickerSheet.
+//  Floating glass composer: branch · usage · prompt · mode/model · send.
+//  `/` and `@` picker: AgentComposerTriggerDock.
 //
 
 import SwiftUI
@@ -17,7 +17,6 @@ struct AgentCommandComposer: View {
     @Binding var isLaunching: Bool
 
     var canLaunch: Bool
-    var canAddSelectedFile: Bool
     var onSend: () -> Void
 
     @State private var modelPickerOpen = false
@@ -26,84 +25,112 @@ struct AgentCommandComposer: View {
         agent.phase.isBusy || !agent.socketState.isReady
     }
 
+    /// Inset from the glass rim to the four corner controls (branch, usage, mode, send).
+    private static let chromeInset: CGFloat = 14
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            topBar
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
+        AgentComposerTriggerDock(
+            agent: agent,
+            session: session,
+            promptSelection: $promptSelection,
+            promptFocused: promptFocused,
+            composerDisabled: composerDisabled
+        ) { menuKeys in
+            VStack(alignment: .leading, spacing: 0) {
+                topBar
+                    .padding(.bottom, 2)
 
-            AgentComposerPromptEditor(
-                text: $agent.prompt,
-                selection: $promptSelection,
-                placeholder: agent.composerMode.promptPlaceholder,
-                isDisabled: composerDisabled,
-                canSend: canLaunch,
-                promptFocused: promptFocused,
-                onSend: onSend,
-                onInsertNewline: insertPromptNewline
-            )
-            .padding(.horizontal, 4)
+                AgentComposerPromptEditor(
+                    text: $agent.prompt,
+                    selection: $promptSelection,
+                    placeholder: agent.composerMode.promptPlaceholder,
+                    isDisabled: composerDisabled,
+                    canSend: canLaunch,
+                    promptFocused: promptFocused,
+                    onSend: onSend,
+                    onInsertNewline: insertPromptNewline,
+                    menuKeys: menuKeys
+                )
 
-            bottomBar
-                .padding(.horizontal, 8)
-                .padding(.top, 2)
-                .padding(.bottom, 8)
+                bottomBar
+                    .padding(.top, 2)
+            }
+            .padding(Self.chromeInset)
+            .helmSystemGlassPanel(cornerRadius: 26, interactive: true)
         }
-        .helmSystemGlassPanel(cornerRadius: 26, interactive: true)
         .sheet(isPresented: $modelPickerOpen) {
             AgentModelPickerSheet(agent: agent, isPresented: $modelPickerOpen)
         }
     }
 
-    // MARK: - Top (branch · add file)
+    // MARK: - Top (branch · usage)
 
     private var topBar: some View {
         HStack(spacing: 6) {
-            branchMenu
+            branchLabel
             Spacer(minLength: 4)
-            addFileButton
+            usageMeter
         }
     }
 
-    private var branchMenu: some View {
-        AgentComposerChipMenu(
-            title: AgentComposerBranches.displayTitle(agent.baseBranch),
-            systemImage: "arrow.triangle.branch",
-            disabled: composerDisabled
-        ) {
-            ForEach(branchChoices, id: \.self) { branch in
-                Button {
-                    agent.baseBranch = branch
-                } label: {
-                    if branch == agent.baseBranch {
-                        Label(branch, systemImage: "checkmark")
-                    } else {
-                        Text(branch)
-                    }
-                }
+    private var branchLabel: some View {
+        Label(currentBranchTitle, systemImage: "arrow.triangle.branch")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Branch \(currentBranchTitle)")
+    }
+
+    private var currentBranchTitle: String {
+        AgentComposerBranches.currentName(
+            sourceControlBranch: session.sourceControl?.branch,
+            projectBranch: session.selectedProject?.trimmedBranch,
+            fallback: agent.baseBranch
+        )
+    }
+
+    private var usageMeter: some View {
+        let usage = agent.sessionUsage
+        return HStack(spacing: 8) {
+            Text(usage?.contextLabel ?? "—")
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(usageTint(usage?.fraction ?? 0))
+            if let cost = usage?.costLabel {
+                Text(cost)
+                    .font(.caption.weight(.regular).monospacedDigit())
+                    .foregroundStyle(.tertiary)
             }
         }
-        .accessibilityLabel("Branch \(agent.baseBranch)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(usageAccessibility(usage))
+        .help(usageHelp(usage))
     }
 
-    private var addFileButton: some View {
-        Button {
-            insertSelectedFileTag()
-        } label: {
-            Label("Add file", systemImage: "plus")
-                .font(.caption.weight(.semibold))
-                .labelStyle(.titleAndIcon)
+    private func usageTint(_ fraction: Double) -> Color {
+        if fraction >= 0.95 { return .red }
+        if fraction >= 0.75 { return .orange }
+        return .secondary
+    }
+
+    private func usageAccessibility(_ usage: SessionUsage?) -> String {
+        guard let usage else { return "Context size unavailable" }
+        var parts = ["Context \(usage.contextLabel)"]
+        if let cost = usage.costLabel {
+            parts.append("Cost \(cost)")
         }
-        .buttonStyle(.glass)
-        .controlSize(.small)
-        .disabled(!canAddSelectedFile)
-        .accessibilityLabel("Add selected file at cursor")
-        .help(
-            canAddSelectedFile
-                ? "Insert @\(session.selectedFile?.path ?? "file") at the caret"
-                : "Select a file in the project tree first"
-        )
+        return parts.joined(separator: ", ")
+    }
+
+    private func usageHelp(_ usage: SessionUsage?) -> String {
+        guard let usage else {
+            return "Context window and cost appear when the agent reports usage"
+        }
+        if let cost = usage.costLabel {
+            return "Context \(usage.contextLabel) · \(cost)"
+        }
+        return "Context \(usage.contextLabel)"
     }
 
     // MARK: - Bottom (mode · model · send)
@@ -171,31 +198,7 @@ struct AgentCommandComposer: View {
         .animation(.easeInOut(duration: 0.15), value: canLaunch)
     }
 
-    // MARK: - Branch / tags
-
-    private var branchChoices: [String] {
-        AgentComposerBranches.choices(
-            current: agent.baseBranch,
-            projectBranch: session.selectedProject?.trimmedBranch,
-            sourceControlBranch: session.sourceControl?.branch
-        )
-    }
-
-    private func insertSelectedFileTag() {
-        guard let file = session.selectedFile, !file.isDirectory else { return }
-        let path = VFSPath.normalize(file.path)
-        guard !path.isEmpty else { return }
-
-        agent.addContextPath(path)
-        let edited = AgentPromptEditing.insert(
-            AgentPromptTagging.fileTag(for: path),
-            into: agent.prompt,
-            selection: promptSelection
-        )
-        agent.prompt = edited.text
-        promptSelection = edited.selection
-        promptFocused.wrappedValue = true
-    }
+    // MARK: - Newline
 
     private func insertPromptNewline() {
         let edited = AgentPromptEditing.insertRaw(

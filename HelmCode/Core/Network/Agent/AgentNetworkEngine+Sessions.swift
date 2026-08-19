@@ -65,6 +65,7 @@ extension AgentNetworkEngine {
         timelineIDsBeforeTurn = []
         activeTaskID = id
         sessionTitle = sessions.first(where: { $0.id == id })?.title
+        sessionUsage = nil
         if let listed = sessions.first(where: { $0.id == id }) {
             applySessionMeta(listed)
         }
@@ -191,6 +192,9 @@ extension AgentNetworkEngine {
         if let wid = session.workspaceId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !wid.isEmpty {
             workspaceId = wid
+        }
+        if let usage = session.usage {
+            sessionUsage = usage
         }
         if !availableComposerModes.contains(composerMode) {
             composerMode = .agent

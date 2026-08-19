@@ -208,6 +208,18 @@ enum JSONValue: Codable, Sendable, Equatable, Hashable {
         if case .array(let a) = self { return a }
         return nil
     }
+
+    var numberValue: Double? {
+        switch self {
+        case .number(let n): return n
+        case .string(let s): return Double(s)
+        default: return nil
+        }
+    }
+
+    var intValue: Int? {
+        numberValue.map { Int($0) }
+    }
 }
 
 // MARK: - Formatting

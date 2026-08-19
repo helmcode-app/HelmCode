@@ -52,6 +52,45 @@ enum AgentPromptEditing {
         return apply(insertion, to: result, range: replaceRange)
     }
 
+    /// Replace an explicit range (slash / mention token) and park the caret after it.
+    static func replace(
+        _ range: Range<String.Index>,
+        with insertion: String,
+        in text: String
+    ) -> (text: String, selection: TextSelection) {
+        apply(insertion, to: text, range: range)
+    }
+
+    /// Caret used by `/` and `@` token detection. Nil selection → end of text.
+    static func insertionIndex(in text: String, selection: TextSelection?) -> String.Index {
+        let end = text.endIndex
+        guard let selection else { return end }
+        switch selection.indices {
+        case .selection(let range):
+            return range.upperBound
+        case .multiSelection(let ranges):
+            return ranges.ranges.first?.upperBound ?? end
+        @unknown default:
+            return end
+        }
+    }
+
+    /// True when the editor has a caret rather than a highlighted range.
+    static func isCollapsed(_ selection: TextSelection?) -> Bool {
+        guard let selection else { return true }
+        switch selection.indices {
+        case .selection(let range):
+            return range.isEmpty
+        case .multiSelection(let ranges):
+            guard let first = ranges.ranges.first, ranges.ranges.count == 1 else {
+                return false
+            }
+            return first.isEmpty
+        @unknown default:
+            return true
+        }
+    }
+
     private static func replacementRange(
         in text: String,
         selection: TextSelection?

@@ -54,6 +54,14 @@ extension AgentNetworkEngine {
                         self.phase = .succeeded
                         self.pollStatus = .succeeded
                         self.stopPolling()
+                        // OpenCode emits usage_update only at end-of-turn, often
+                        // after the timeline already looks complete — fetch once
+                        // more (and again shortly after) so the composer meter fills.
+                        await self.pollHistoryOnce(sessionId: sessionId, forDisplay: true)
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            await self?.pollHistoryOnce(sessionId: sessionId, forDisplay: true)
+                        }
                         break
                     }
                 }
@@ -77,10 +85,10 @@ extension AgentNetworkEngine {
         pollTask = nil
     }
 
-    func pollHistoryOnce(sessionId: String) async {
+    func pollHistoryOnce(sessionId: String, forDisplay: Bool = false) async {
         do {
             let history = try await api.sessionHistory(id: sessionId, limit: 200)
-            applyHistory(history)
+            applyHistory(history, forDisplay: forDisplay)
         } catch {
             log.debug("session history poll soft-fail: \(error.localizedDescription, privacy: .public)")
         }

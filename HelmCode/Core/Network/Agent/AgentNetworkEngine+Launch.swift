@@ -67,7 +67,9 @@ extension AgentNetworkEngine {
                 prompt: trimmed,
                 model: modelID.isEmpty ? nil : modelID,
                 mode: composerMode.rawValue,
-                contextPaths: contextPaths.isEmpty ? nil : contextPaths
+                contextPaths: contextPaths.isEmpty ? nil : contextPaths,
+                thinkLevel: thinkLevel.rawValue,
+                fast: fastMode
             )
             let acceptedRemote = try await api.promptSession(id: sid, body: body)
             activeTaskID = acceptedRemote.sessionId

@@ -21,14 +21,6 @@ struct AgentCommandPanel: View {
         session.selectedProject?.normalizedRunnerURL != nil
     }
 
-    private var canAddSelectedFile: Bool {
-        guard !agent.phase.isBusy,
-              agent.socketState.isReady,
-              let file = session.selectedFile,
-              !file.isDirectory else { return false }
-        return true
-    }
-
     private var canLaunch: Bool {
         let trimmed = agent.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return projectRunnerReady
@@ -52,7 +44,7 @@ struct AgentCommandPanel: View {
             seedBranchFromProject()
             agent.clearContextPaths()
         }
-        .onChange(of: session.selectedFileID) { _, _ in
+        .onChange(of: session.sourceControl?.branch) { _, _ in
             seedBranchFromProject()
         }
         .sheet(isPresented: $showSessionPicker) {
@@ -102,7 +94,6 @@ struct AgentCommandPanel: View {
                 promptSelection: $promptSelection,
                 isLaunching: $isLaunching,
                 canLaunch: canLaunch,
-                canAddSelectedFile: canAddSelectedFile,
                 onSend: { Task { await launch() } }
             )
         }
@@ -131,10 +122,13 @@ struct AgentCommandPanel: View {
     }
 
     private func seedBranchFromProject() {
-        if agent.baseBranch == "main" || agent.baseBranch.isEmpty,
-           let branch = session.selectedProject?.trimmedBranch,
-           !branch.isEmpty {
-            agent.baseBranch = branch
+        let live = AgentComposerBranches.currentName(
+            sourceControlBranch: session.sourceControl?.branch,
+            projectBranch: session.selectedProject?.trimmedBranch,
+            fallback: ""
+        )
+        if live != "branch" {
+            agent.baseBranch = live
         }
     }
 

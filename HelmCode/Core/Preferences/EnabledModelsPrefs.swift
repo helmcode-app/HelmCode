@@ -64,4 +64,21 @@ enum EnabledModelsPrefs {
         }
         return out.isEmpty ? source : out
     }
+
+    /// `4/27` (enabled / catalog size). `nil` when the catalog is empty.
+    static func enabledOverAvailableLabel(
+        catalog: [AgentModelOption],
+        runnerURL: String,
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        guard !catalog.isEmpty else { return nil }
+        let available = catalog.count
+        let enabled: Int
+        if let saved = load(runnerURL: runnerURL, defaults: defaults) {
+            enabled = catalog.filter { saved.contains($0.id) }.count
+        } else {
+            enabled = available
+        }
+        return "\(enabled)/\(available)"
+    }
 }

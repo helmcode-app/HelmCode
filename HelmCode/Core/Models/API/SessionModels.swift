@@ -4,6 +4,7 @@
 //
 //  Codable contracts for runner-core `/v1/sessions/*` (backend-agnostic).
 //  Aligned with runner-core services/runner/src/sessions/types.ts.
+//  Usage snapshot: SessionUsage.swift.
 //
 
 import Foundation
@@ -21,6 +22,8 @@ struct AgentSessionDTO: Codable, Sendable, Equatable, Identifiable {
     let modes: [String]?
     /// Workspace this session edits (`default` = primary repo).
     let workspaceId: String?
+    /// ACP `usage_update` snapshot when the runner forwards it.
+    let usage: SessionUsage?
 }
 
 enum SessionStatusWire: String, Codable, Sendable {
@@ -68,6 +71,10 @@ struct SessionPromptBody: Encodable, Sendable {
     var model: String?
     var mode: String?
     var contextPaths: [String]?
+    /// ACP-style thought level: `low` / `medium` / `high` / `xhigh`.
+    var thinkLevel: String?
+    /// Faster, cheaper inference when true.
+    var fast: Bool?
 }
 
 struct SessionPromptAccepted: Codable, Sendable, Equatable {
@@ -96,6 +103,8 @@ struct SessionHistoryEnvelope: Codable, Sendable, Equatable {
     let sessionId: String
     let session: AgentSessionDTO?
     let entries: [SessionTimelineEntry]
+    /// Session-level context window + cost (ACP `usage_update`).
+    var usage: SessionUsage? = nil
 }
 
 struct SessionCancelResponse: Codable, Sendable, Equatable {

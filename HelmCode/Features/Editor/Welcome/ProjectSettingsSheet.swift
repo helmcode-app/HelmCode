@@ -23,6 +23,9 @@ struct ProjectSettingsSheet: View {
     @State private var isSaving = false
     @State private var runnerReachable = false
     @State private var isProbingRunner = false
+    @State private var modelCatalog: [AgentModelOption] = []
+    /// Bumped when returning from Models so UserDefaults curation is re-read.
+    @State private var modelsPrefsStamp = 0
 
     private var project: WorkspaceProject? {
         session.projects.first { $0.id == projectID }
@@ -128,8 +131,20 @@ struct ProjectSettingsSheet: View {
                         apiToken: apiToken,
                         agent: agent
                     )
+                    .onDisappear {
+                        syncModelsCatalogFromAgent()
+                        modelsPrefsStamp += 1
+                    }
                 } label: {
-                    Label("Models", systemImage: "cpu")
+                    HStack {
+                        Label("Models", systemImage: "cpu")
+                        Spacer()
+                        if let label = modelsCountLabel {
+                            Text(label)
+                                .foregroundStyle(.secondary)
+                                .font(.body.monospacedDigit())
+                        }
+                    }
                 }
                 .disabled(isSaving)
             } else {
@@ -152,6 +167,14 @@ struct ProjectSettingsSheet: View {
         } footer: {
             Text(modelsFooterText)
         }
+    }
+
+    private var modelsCountLabel: String? {
+        _ = modelsPrefsStamp
+        return EnabledModelsPrefs.enabledOverAvailableLabel(
+            catalog: modelCatalog,
+            runnerURL: normalizedDraftURL
+        )
     }
 
     private var modelsFooterText: String {
@@ -193,6 +216,41 @@ struct ProjectSettingsSheet: View {
         // Ignore stale results if the user edited the URL mid-probe.
         guard RunnerURL.normalizeHTTP(runnerURL) == url else { return }
         runnerReachable = online
+        if online {
+            await refreshModelsCatalog(url: url, token: token)
+        } else {
+            modelCatalog = []
+        }
+    }
+
+    private var agentTargetsDraftRunner: Bool {
+        let active = RunnerURL.normalizeHTTP(agent.baseURLString)
+        return !active.isEmpty && active == normalizedDraftURL
+    }
+
+    private func syncModelsCatalogFromAgent() {
+        guard agentTargetsDraftRunner, !agent.modelCatalog.isEmpty else { return }
+        modelCatalog = agent.modelCatalog
+    }
+
+    @MainActor
+    private func refreshModelsCatalog(url: String, token: String) async {
+        if agentTargetsDraftRunner,
+           agent.modelCatalogLoaded,
+           !agent.modelCatalog.isEmpty {
+            modelCatalog = agent.modelCatalog
+        }
+        do {
+            let client = RunnerCoreAPIClient(baseURLString: url, apiToken: token)
+            let response = try await client.sessionModels()
+            let mapped = AgentModelOption.fromResponse(response)
+            guard RunnerURL.normalizeHTTP(runnerURL) == url else { return }
+            if !mapped.isEmpty {
+                modelCatalog = mapped
+            }
+        } catch {
+            // Keep whatever we already have (agent catalog or empty).
+        }
     }
 
     @MainActor

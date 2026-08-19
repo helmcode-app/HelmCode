@@ -2,7 +2,7 @@
 //  AgentComposerChipMenu.swift
 //  HelmCode
 //
-//  Small glass chip Menu used by the composer (branch / mode).
+//  Small glass chip Menu used by the composer (mode / model).
 //
 
 import SwiftUI

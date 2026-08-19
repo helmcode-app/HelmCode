@@ -2,10 +2,19 @@
 //  AgentComposerPromptEditor.swift
 //  HelmCode
 //
-//  Composer prompt field: TextEditor + placeholder + Return / Option+Return keys.
+//  Composer prompt field: TextEditor + placeholder.
+//  Return sends · Option+Return newline · picker keys when `/` or `@` is open.
 //
 
 import SwiftUI
+
+/// Hardware-keyboard routing while the `/` / `@` menu is open.
+struct AgentComposerMenuKeys {
+    var isActive: Bool
+    var onMove: (Int) -> Void
+    var onConfirm: () -> Bool
+    var onCancel: () -> Void
+}
 
 struct AgentComposerPromptEditor: View {
     @Binding var text: String
@@ -16,6 +25,7 @@ struct AgentComposerPromptEditor: View {
     var promptFocused: FocusState<Bool>.Binding
     var onSend: () -> Void
     var onInsertNewline: () -> Void
+    var menuKeys: AgentComposerMenuKeys? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -37,10 +47,34 @@ struct AgentComposerPromptEditor: View {
                     if !press.modifiers.isEmpty {
                         return .ignored
                     }
+                    if menuKeys?.isActive == true {
+                        _ = menuKeys?.onConfirm()
+                        return .handled
+                    }
                     if canSend {
                         onSend()
                         return .handled
                     }
+                    return .handled
+                }
+                .onKeyPress(.upArrow) {
+                    guard menuKeys?.isActive == true else { return .ignored }
+                    menuKeys?.onMove(-1)
+                    return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    guard menuKeys?.isActive == true else { return .ignored }
+                    menuKeys?.onMove(1)
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    guard menuKeys?.isActive == true else { return .ignored }
+                    menuKeys?.onCancel()
+                    return .handled
+                }
+                .onKeyPress(.tab) {
+                    guard menuKeys?.isActive == true else { return .ignored }
+                    _ = menuKeys?.onConfirm()
                     return .handled
                 }
 

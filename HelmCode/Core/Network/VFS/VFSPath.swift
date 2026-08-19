@@ -24,4 +24,11 @@ enum VFSPath {
         guard let slash = trimmed.lastIndex(of: "/") else { return trimmed }
         return String(trimmed[trimmed.index(after: slash)...])
     }
+
+    /// Parent directory of a relative path (`""` at the workspace root).
+    static func directory(of path: String) -> String {
+        let trimmed = normalize(path)
+        guard let slash = trimmed.lastIndex(of: "/") else { return "" }
+        return String(trimmed[..<slash])
+    }
 }

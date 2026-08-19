@@ -9,7 +9,7 @@ HelmCode/
 ├── App/                      # @main, RootView, WorkspaceRuntimeModifier
 ├── Core/
 │   ├── Models/
-│   │   ├── API/              # open-core + Agent domain models
+│   │   ├── API/              # sessions wire + Agent / composer models
 │   │   └── Workspace/        # tree, search, SCM, language hints
 │   ├── Network/
 │   │   ├── …                 # HTTP client, RunnerURL, BackendConnectionSync
@@ -24,7 +24,7 @@ HelmCode/
 │   │   ├── CodeMirror/       # CM6 host (Swift + offline web assets)
 │   │   ├── Terminal/         # WebSSH xterm.js full-column panel (⌘J)
 │   │   └── Editor*.swift     # detail routing, canvas, empty, switcher
-│   ├── Commander/            # AgentCommandPanel + timeline + prompt tags
+│   ├── Commander/            # AgentCommandPanel + timeline + `/` `@` composer
 │   └── Settings/             # appearance / layout / shortcuts
 └── Shared/UI/                # chrome, search field, avatars, file type icons
 ```
@@ -129,7 +129,8 @@ Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see ru
 | Component | Role |
 |-----------|------|
 | `AgentCommandPanel` | Shell: header + timeline + composer dock |
-| `AgentCommandComposer` | Prompt / branch / mode / model / send |
+| `AgentCommandComposer` | Prompt chrome: branch / usage / mode / model / send |
+| `AgentComposerTriggerDock` | `/` skills + `@` files (in-chat picker, not a system sheet) |
 | `AgentTimelineView` | Session scroll list (`EventLog`) |
 | `AgentNetworkEngine` | `/v1/sessions` client (create / prompt / history / cancel / rewind) |
 | `HelmCodeNetworkEngine` | `GET /health` + `GET /v1/status` probe only |

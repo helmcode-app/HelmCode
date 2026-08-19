@@ -2,36 +2,22 @@
 //  AgentComposerBranches.swift
 //  HelmCode
 //
-//  Branch chip choices for the agent composer (UI-only preference).
+//  Current-branch label for the agent composer (read-only).
 //
 
 import Foundation
 
 enum AgentComposerBranches {
-    /// Unique branch labels for the composer menu, current first, then common defaults.
-    static func choices(
-        current: String,
+    /// Live HEAD first (SCM, then project metadata), then the last seeded value.
+    static func currentName(
+        sourceControlBranch: String?,
         projectBranch: String?,
-        sourceControlBranch: String?
-    ) -> [String] {
-        var set: [String] = []
-        func add(_ raw: String?) {
-            guard let raw else { return }
-            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !t.isEmpty, !set.contains(t) else { return }
-            set.append(t)
+        fallback: String
+    ) -> String {
+        for raw in [sourceControlBranch, projectBranch, fallback] {
+            let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty, trimmed != "—" { return trimmed }
         }
-        add(current)
-        add(projectBranch)
-        add(sourceControlBranch)
-        add("main")
-        add("master")
-        add("develop")
-        return set
-    }
-
-    static func displayTitle(_ branch: String) -> String {
-        let b = branch.trimmingCharacters(in: .whitespacesAndNewlines)
-        return b.isEmpty ? "branch" : b
+        return "branch"
     }
 }

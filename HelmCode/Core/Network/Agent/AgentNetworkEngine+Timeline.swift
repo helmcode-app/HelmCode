@@ -24,6 +24,12 @@ extension AgentNetworkEngine {
             ingestTimelineEntry(entry, sessionId: sid, forDisplay: forDisplay)
         }
 
+        if let usage = history.usage
+            ?? history.session?.usage
+            ?? history.entries.reversed().compactMap({ SessionUsage.parse(from: $0.meta) }).first {
+            sessionUsage = usage
+        }
+
         // Display-only restore: never leave phase/poll as Running.
         if forDisplay {
             return
