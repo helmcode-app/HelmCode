@@ -101,7 +101,7 @@ Connects to runner-core **JSON-RPC over WebSocket** (`docs/api/vfs.md` in `runne
 | Client | `VFSNetworkEngine` — heartbeat, auto-reconnect, request/response map |
 | Methods | `vfs/initialize`, `vfs/read`, `vfs/read_chunk`, `vfs/write`, `vfs/shutdown`, git (`gitStatus` / `gitRefs` / `gitDiff` / `gitShow` / `gitCheckout`) |
 | Stream | `VFSStreamEngine` progressive open for large files |
-| Notifications | `vfs/didChange` → selective buffer reload / tree refresh (non-blocking receive) |
+| Notifications | `vfs/didChange` → selective buffer reload / tree refresh; bulk `sync` after Terminal git |
 | Editor | Autosave + ⌘S write-back; soft hot-reload keeps open file + scroll |
 | Identity | `initialize.name` / `remote` / `branch` → project title / subtitle / SCM |
 | Persistence | `SavedProjectRecord` in UserDefaults (metadata only; tree reloaded via VFS) |

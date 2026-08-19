@@ -4,7 +4,7 @@
 //
 //  Codable contracts for runner-core `/v1/sessions/*` (backend-agnostic).
 //  Aligned with runner-core services/runner/src/sessions/types.ts.
-//  Usage snapshot: SessionUsage.swift.
+//  Usage: SessionUsage.swift · titles: SessionChatTitle.swift.
 //
 
 import Foundation
@@ -13,7 +13,7 @@ import Foundation
 
 struct AgentSessionDTO: Codable, Sendable, Equatable, Identifiable {
     let id: String
-    let title: String?
+    var title: String?
     let status: SessionStatusWire
     let createdAt: String?
     let updatedAt: String?
@@ -97,6 +97,11 @@ struct SessionTimelineEntry: Codable, Sendable, Equatable, Identifiable {
     let done: Bool?
     /// Optional structured extras (`reasoning`, `tools`, `answer`) from the runner mapper.
     let meta: [String: JSONValue]?
+
+    var isUserText: Bool {
+        (role ?? "").lowercased() == "user"
+            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 struct SessionHistoryEnvelope: Codable, Sendable, Equatable {

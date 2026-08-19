@@ -7,7 +7,7 @@
 //  File map (same type, split by concern):
 //    AgentNetworkEngine.swift            — state, lifecycle, context paths, helpers
 //    AgentNetworkEngine+Connection.swift — health, reconnect, model catalog
-//    AgentNetworkEngine+Sessions.swift   — list / create / select / delete
+//    AgentNetworkEngine+Sessions.swift   — list / create / select / delete / titles
 //    AgentNetworkEngine+Launch.swift     — prompt launch + cancel
 //    AgentNetworkEngine+Polling.swift    — history poll + turn completion
 //    AgentNetworkEngine+Timeline.swift   — history → EventLog, synthetic rows

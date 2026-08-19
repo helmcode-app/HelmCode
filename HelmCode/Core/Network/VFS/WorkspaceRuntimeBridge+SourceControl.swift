@@ -34,7 +34,7 @@ extension WorkspaceRuntimeBridge {
         }
     }
 
-    /// Checkout a branch/tag, then refresh tree + SCM snapshot.
+    /// Checkout a branch/tag, then refresh the tree once (not per-file didChange).
     static func checkoutSourceControlRef(
         _ ref: GitRef,
         from vfs: VFSNetworkEngine,
@@ -47,7 +47,7 @@ extension WorkspaceRuntimeBridge {
         do {
             _ = try await vfs.gitCheckout(ref: ref.name, kind: ref.kind.vfsKind)
             session.clearSourceControlDiff()
-            _ = try await vfs.initialize()
+            try await vfs.refreshTreeAndOpenBuffers()
             await refreshSourceControl(from: vfs, to: session, forceLoading: true)
         } catch {
             session.lastTreeError = sourceControlErrorMessage(error)

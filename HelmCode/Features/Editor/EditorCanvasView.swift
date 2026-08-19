@@ -132,15 +132,12 @@ struct EditorCanvasView: View {
             takePendingReveal()
         }
         .onChange(of: vfs.bufferRevision) { _, _ in
-            applyRemoteCacheIfClean()
+            applyRemoteFileIfClean()
         }
         .onChange(of: vfs.lastChange) { _, change in
             guard usesVFS, let change else { return }
             guard VFSPath.matches(change.path, file.path) else { return }
-            applyRemoteCacheIfClean()
-            if !isDirty, vfs.cachedContent(for: file.path) == nil {
-                Task { await reloadBuffer(markSaved: true) }
-            }
+            applyRemoteFileIfClean()
         }
         .onDisappear {
             autosaveTask?.cancel()

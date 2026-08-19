@@ -68,8 +68,9 @@ struct AgentCommandComposer: View {
     private var topBar: some View {
         HStack(spacing: 6) {
             branchLabel
-            Spacer(minLength: 4)
-            usageMeter
+                .frame(maxWidth: .infinity, alignment: .leading)
+            AgentComposerUsageMeter(usage: agent.sessionUsage)
+                .layoutPriority(1)
         }
     }
 
@@ -89,48 +90,6 @@ struct AgentCommandComposer: View {
             projectBranch: session.selectedProject?.trimmedBranch,
             fallback: agent.baseBranch
         )
-    }
-
-    private var usageMeter: some View {
-        let usage = agent.sessionUsage
-        return HStack(spacing: 8) {
-            Text(usage?.contextLabel ?? "—")
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(usageTint(usage?.fraction ?? 0))
-            if let cost = usage?.costLabel {
-                Text(cost)
-                    .font(.caption.weight(.regular).monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(usageAccessibility(usage))
-        .help(usageHelp(usage))
-    }
-
-    private func usageTint(_ fraction: Double) -> Color {
-        if fraction >= 0.95 { return .red }
-        if fraction >= 0.75 { return .orange }
-        return .secondary
-    }
-
-    private func usageAccessibility(_ usage: SessionUsage?) -> String {
-        guard let usage else { return "Context size unavailable" }
-        var parts = ["Context \(usage.contextLabel)"]
-        if let cost = usage.costLabel {
-            parts.append("Cost \(cost)")
-        }
-        return parts.joined(separator: ", ")
-    }
-
-    private func usageHelp(_ usage: SessionUsage?) -> String {
-        guard let usage else {
-            return "Context window and cost appear when the agent reports usage"
-        }
-        if let cost = usage.costLabel {
-            return "Context \(usage.contextLabel) · \(cost)"
-        }
-        return "Context \(usage.contextLabel)"
     }
 
     // MARK: - Bottom (mode · model · send)

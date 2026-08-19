@@ -19,7 +19,8 @@ extension AgentNetworkEngine {
             let list = try await api.listSessions()
             sessions = list.sorted { sessionSortKey($0) > sessionSortKey($1) }
             if let sid = sessionID {
-                sessionTitle = list.first(where: { $0.id == sid })?.title
+                let listed = list.first(where: { $0.id == sid })?.title
+                sessionTitle = SessionChatTitle.coalesce(listed, sessionTitle)
             }
         } catch {
             log.debug("listSessions soft-fail: \(error.localizedDescription, privacy: .public)")
@@ -35,11 +36,11 @@ extension AgentNetworkEngine {
         resetSession()
         do {
             let session = try await api.createSession(
-                title: "New chat",
+                title: nil,
                 workspaceId: workspaceId
             )
             sessionID = session.id
-            sessionTitle = session.title ?? "New chat"
+            sessionTitle = session.title ?? SessionChatTitle.placeholder
             activeTaskID = session.id
             applySessionMeta(session)
             await refreshSessionList()
@@ -110,7 +111,7 @@ extension AgentNetworkEngine {
             return existing
         }
         let session = try await api.createSession(
-            title: "HelmCode",
+            title: nil,
             workspaceId: workspaceId
         )
         sessionID = session.id
@@ -186,6 +187,10 @@ extension AgentNetworkEngine {
     }
 
     func applySessionMeta(_ session: AgentSessionDTO) {
+        if let title = SessionChatTitle.coalesce(session.title, sessionTitle) {
+            sessionTitle = title
+        }
+        upsertListedSession(session)
         if let modes = session.modes {
             advertisedModes = modes
         }
@@ -198,6 +203,39 @@ extension AgentNetworkEngine {
         }
         if !availableComposerModes.contains(composerMode) {
             composerMode = .agent
+        }
+    }
+
+    /// First user prompt becomes the chat name while the title is still a placeholder.
+    func adoptGeneratedTitleIfNeeded(from prompt: String) {
+        guard SessionChatTitle.isPlaceholder(sessionTitle) else { return }
+        applyGeneratedTitle(SessionChatTitle.fromUserPrompt(prompt))
+    }
+
+    func bindTitleAfterPrompt(_ prompt: String, prior: SessionHistoryEnvelope) async {
+        if !prior.entries.contains(where: \.isUserText) {
+            adoptGeneratedTitleIfNeeded(from: prompt)
+        }
+        await refreshSessionList()
+    }
+
+    private func applyGeneratedTitle(_ title: String) {
+        sessionTitle = title
+        if let sid = sessionID ?? activeTaskID,
+           let idx = sessions.firstIndex(where: { $0.id == sid }) {
+            sessions[idx].title = title
+        }
+    }
+
+    private func upsertListedSession(_ session: AgentSessionDTO) {
+        var next = session
+        if SessionChatTitle.isPlaceholder(next.title),
+           let existing = sessions.first(where: { $0.id == session.id })?.title,
+           !SessionChatTitle.isPlaceholder(existing) {
+            next.title = existing
+        }
+        if let idx = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[idx] = next
         }
     }
 

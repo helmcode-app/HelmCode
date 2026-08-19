@@ -81,6 +81,13 @@ extension EditorCanvasView {
         loadError = nil
     }
 
+    /// Cache hit for a clean buffer, or re-stream when the remote file disappeared.
+    func applyRemoteFileIfClean() {
+        applyRemoteCacheIfClean()
+        guard usesVFS, !isDirty, vfs.cachedContent(for: file.path) == nil else { return }
+        Task { await reloadBuffer(markSaved: true) }
+    }
+
     @MainActor
     func pollRemoteFile() async {
         guard usesVFS, !file.isDirectory, !isDirty, !isSaving, !isReadOnlyStream else { return }

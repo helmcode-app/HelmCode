@@ -207,6 +207,8 @@ enum VFSChangeType: String, Codable, Sendable {
     case create
     case remove
     case rename
+    /// Coalesced bulk worktree rewrite (path is `"."`).
+    case sync
 }
 
 struct VFSDidChangeParams: Codable, Sendable, Equatable {

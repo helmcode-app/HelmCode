@@ -84,9 +84,10 @@ struct AgentCommandHeader: View {
     }
 
     private var headerTitle: String {
-        if let t = agent.sessionTitle, !t.isEmpty { return t }
-        if agent.activeSessionID != nil { return "Chat" }
-        return "Agent"
+        if agent.activeSessionID == nil, SessionChatTitle.isPlaceholder(agent.sessionTitle) {
+            return "Agent"
+        }
+        return SessionChatTitle.display(agent.sessionTitle)
     }
 
     private var phaseChip: some View {

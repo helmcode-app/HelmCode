@@ -30,6 +30,10 @@ extension AgentNetworkEngine {
             sessionUsage = usage
         }
 
+        if let session = history.session {
+            applySessionMeta(session)
+        }
+
         // Display-only restore: never leave phase/poll as Running.
         if forDisplay {
             return
@@ -48,7 +52,6 @@ extension AgentNetworkEngine {
         }
 
         if let session = history.session {
-            applySessionMeta(session)
             switch session.status {
             case .failed:
                 if phase.isBusy,

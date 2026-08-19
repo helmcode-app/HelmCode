@@ -128,7 +128,7 @@ struct AgentSessionPickerSheet: View {
                     pendingDelete = nil
                 }
             } message: { item in
-                Text(item.title?.isEmpty == false ? item.title! : "Untitled chat")
+                Text(SessionChatTitle.display(item.title))
             }
         }
         .presentationDetents([.medium, .large])
@@ -180,8 +180,7 @@ struct AgentSessionPickerSheet: View {
     }
 
     private func displayTitle(for item: AgentSessionDTO) -> String {
-        if let t = item.title, !t.isEmpty { return t }
-        return "Untitled chat"
+        SessionChatTitle.display(item.title)
     }
 
     private func statusDot(for status: SessionStatusWire) -> some View {

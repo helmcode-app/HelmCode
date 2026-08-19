@@ -25,6 +25,10 @@ enum VFSPath {
         return String(trimmed[trimmed.index(after: slash)...])
     }
 
+    static func isGitHead(_ path: String) -> Bool {
+        normalize(path) == ".git/HEAD"
+    }
+
     /// Parent directory of a relative path (`""` at the workspace root).
     static func directory(of path: String) -> String {
         let trimmed = normalize(path)

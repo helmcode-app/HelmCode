@@ -5,6 +5,11 @@
 //  Persistent WebSocket tunnel to runner-core `ws://…/v1/vfs` with JSON-RPC 2.0.
 //  Heartbeat + auto-reconnect for Stage Manager / network drops.
 //
+//  File map (same type, split by concern):
+//    VFSNetworkEngine.swift            — socket, RPC, initialize / read / write
+//    VFSNetworkEngine+DidChange.swift  — vfs/didChange, open-buffer cache
+//    VFSNetworkEngine+Git.swift        — gitStatus / refs / diff / show / checkout
+//
 
 import Combine
 import Foundation
@@ -28,9 +33,10 @@ final class VFSNetworkEngine: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var lastChange: VFSDidChangeParams?
     /// Path → latest known text (filled by `read` / `write` / selective reload).
-    @Published private(set) var fileBuffers: [String: String] = [:]
+    /// Writable from file-split extensions; UI should use `cachedContent(for:)`.
+    @Published var fileBuffers: [String: String] = [:]
     /// Bumps when a buffer was refreshed from the server (editor can rebind).
-    @Published private(set) var bufferRevision: UInt64 = 0
+    @Published var bufferRevision: UInt64 = 0
 
     // MARK: - Config
 
@@ -68,6 +74,9 @@ final class VFSNetworkEngine: ObservableObject {
     private var receiveTask: Task<Void, Never>?
     private var heartbeatTimer: Timer?
     private var reconnectTask: Task<Void, Never>?
+    var treeRefreshTask: Task<Void, Never>?
+    /// Paths dropped on remove so a following create still hot-reloads the editor.
+    var hotReloadPaths: Set<String> = []
 
     private var nextRequestID = 1
     private var pending: [Int: CheckedContinuation<Data, Error>] = [:]
@@ -76,7 +85,8 @@ final class VFSNetworkEngine: ObservableObject {
     private var reconnectAttempt = 0
     private let requestTimeout: TimeInterval
     private let heartbeatInterval: TimeInterval
-    private let log = Logger(subsystem: "com.helmcode.HelmCode", category: "VFS")
+    let log = Logger(subsystem: "com.helmcode.HelmCode", category: "VFS")
+    let treeRefreshDebounceNanoseconds: UInt64 = 200_000_000
 
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -220,15 +230,7 @@ final class VFSNetworkEngine: ObservableObject {
         return nil
     }
 
-    /// Publish assembled stream content into the buffer map (no network I/O).
-    func cacheContent(_ content: String, for path: String) {
-        fileBuffers[path] = content
-        let normalized = VFSPath.normalize(path)
-        if normalized != path {
-            fileBuffers[normalized] = content
-        }
-        bufferRevision &+= 1
-    }
+    // Buffer reload / didChange: VFSNetworkEngine+DidChange.swift
 
     // MARK: - JSON-RPC
 
@@ -439,39 +441,6 @@ final class VFSNetworkEngine: ObservableObject {
         }
     }
 
-    /// Selective reload: refresh tree on structural change; reload open buffer on write.
-    private func applyDidChange(_ change: VFSDidChangeParams) async {
-        switch change.type {
-        case .write:
-            // Always re-read when notified (host/container edits should reach the open buffer).
-            do {
-                _ = try await readStreaming(path: change.path)
-            } catch {
-                log.error("selective reload failed: \(error.localizedDescription, privacy: .public)")
-            }
-        case .create, .remove, .rename:
-            // Atomic saves often emit remove+create. Refresh open buffer by path first
-            // so the editor can hot-reload; then re-walk the tree without dropping focus.
-            let path = change.path
-            if change.type == .remove {
-                // If the path still exists (rename race), re-read; else drop cache.
-                do {
-                    _ = try await readStreaming(path: path)
-                } catch {
-                    fileBuffers.removeValue(forKey: path)
-                    bufferRevision &+= 1
-                }
-            } else {
-                _ = try? await readStreaming(path: path)
-            }
-            do {
-                _ = try await initialize(root: nil)
-            } catch {
-                log.error("tree refresh after didChange failed: \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
     // MARK: - Heartbeat / reconnect
 
     private func startHeartbeat() {
@@ -527,6 +496,8 @@ final class VFSNetworkEngine: ObservableObject {
         heartbeatTimer = nil
         receiveTask?.cancel()
         receiveTask = nil
+        treeRefreshTask?.cancel()
+        treeRefreshTask = nil
         webSocket?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
         webSocket = nil
         failPending(with: VFSError.closed(reason))

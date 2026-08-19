@@ -9,6 +9,7 @@
 //    AgentCommandPanel.swift             — header + timeline + composer dock
 //    AgentCommandHeader.swift            — session title / picker
 //    AgentCommandComposer.swift          — glass chrome (branch · usage · send)
+//    AgentComposerUsageMeter.swift       — context window / cost
 //    AgentComposerTriggerDock.swift      — `/` skills · `@` files host
 //    AgentComposerTrigger.swift          — caret token detect
 //    AgentComposerTriggerItems.swift     — catalog + pick commit

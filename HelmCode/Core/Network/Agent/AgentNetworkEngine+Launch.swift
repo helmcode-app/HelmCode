@@ -73,6 +73,7 @@ extension AgentNetworkEngine {
             )
             let acceptedRemote = try await api.promptSession(id: sid, body: body)
             activeTaskID = acceptedRemote.sessionId
+            await bindTitleAfterPrompt(trimmed, prior: prior)
             phase = .processing
             pollStatus = .running
             prompt = ""
