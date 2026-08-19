@@ -39,6 +39,9 @@ struct EditorDetailView: View {
             .onChange(of: session.selectedProjectID) { oldID, newID in
                 handleProjectChange(from: oldID, to: newID)
             }
+            .onChange(of: session.editorSurface) { _, surface in
+                revealEditorIfNeeded(for: surface)
+            }
             .onAppear {
                 if !canUseTerminal, showTerminal {
                     applyTerminalVisibility(false)
@@ -220,8 +223,19 @@ struct EditorDetailView: View {
     }
 
     private func hideTerminal() {
+        guard showingTerminal || TerminalVisibilityStore.isShown else { return }
         withAnimation(LayoutMetrics.panelSlideAnimation) {
             applyTerminalVisibility(false)
+        }
+    }
+
+    /// Sidebar / search / SCM asked for a file or diff while Terminal is front.
+    private func revealEditorIfNeeded(for surface: EditorSurface) {
+        switch surface {
+        case .editing, .viewingDiff:
+            hideTerminal()
+        case .welcome, .emptyProject:
+            break
         }
     }
 

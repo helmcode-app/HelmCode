@@ -29,19 +29,16 @@ struct SidebarSourceControlView: View {
                 changesSection(scm)
                 refsSection(
                     title: "Local Branches",
-                    count: scm.localBranches.count,
                     isExpanded: $showLocalBranches,
                     refs: scm.localBranches
                 )
                 refsSection(
                     title: "Remote Branches",
-                    count: scm.remoteBranches.count,
                     isExpanded: $showRemoteBranches,
                     refs: scm.remoteBranches
                 )
                 refsSection(
                     title: "Tags",
-                    count: scm.tags.count,
                     isExpanded: $showTags,
                     refs: scm.tags
                 )
@@ -59,7 +56,7 @@ struct SidebarSourceControlView: View {
             await WorkspaceRuntimeBridge.refreshSourceControl(
                 from: vfs,
                 to: session,
-                forceLoading: true
+                forceLoading: false
             )
         }
     }
@@ -69,9 +66,7 @@ struct SidebarSourceControlView: View {
     @ViewBuilder
     private func changesSection(_ scm: SourceControlState) -> some View {
         // Hide the whole section when clean; keep loading / error / unavailable visible.
-        if scm.phase == .ready && scm.changeCount == 0 {
-            EmptyView()
-        } else {
+        if scm.phase != .ready || scm.changeCount > 0 {
             Section {
                 switch scm.phase {
                 case .loading:
@@ -166,24 +161,20 @@ struct SidebarSourceControlView: View {
 
     // MARK: - Refs
 
+    @ViewBuilder
     private func refsSection(
         title: String,
-        count: Int,
         isExpanded: Binding<Bool>,
         refs: [GitRef]
     ) -> some View {
-        Section(isExpanded: isExpanded) {
-            if refs.isEmpty {
-                Text("None")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
+        if !refs.isEmpty {
+            Section(isExpanded: isExpanded) {
                 ForEach(refs) { ref in
                     refRow(ref)
                 }
+            } header: {
+                Text("\(title) (\(refs.count))")
             }
-        } header: {
-            Text("\(title) (\(count))")
         }
     }
 

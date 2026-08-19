@@ -34,6 +34,9 @@ struct EditorCanvasView: View {
     @State var revealLine: Int?
     /// Bumps so the host re-runs goToLine for the same line if needed.
     @State var revealGeneration: Int = 0
+    /// 1-based caret from CodeMirror (`Ln …, Col …`).
+    @State var cursorLine = 1
+    @State var cursorColumn = 1
 
     // MARK: - Chunked stream
     @StateObject var streamEngine = VFSStreamEngine()
@@ -93,6 +96,11 @@ struct EditorCanvasView: View {
                         guard !streamMode, !isReadOnlyStream else { return }
                         handleTextChange(text)
                         Task { await saveNow(content: text) }
+                    },
+                    onCursorPosition: { line, column in
+                        guard cursorLine != line || cursorColumn != column else { return }
+                        cursorLine = line
+                        cursorColumn = column
                     }
                 )
                 .padding(.horizontal, LayoutMetrics.editorHorizontalInset)
@@ -167,8 +175,9 @@ struct EditorCanvasView: View {
     private var statusBar: some View {
         HStack(spacing: 12) {
             Label(language.displayName, systemImage: "doc.plaintext")
-            Text("UTF-8")
-            Text("LF")
+            if let lineEnding = BufferLineEnding.detect(in: buffer) {
+                Text(lineEnding.statusLabel)
+            }
             Text(isReadOnlyStream ? "Read-only" : "Wrap")
             if usesVFS {
                 Text(vfs.connectionState.isReady ? "VFS" : "VFS…")
@@ -188,6 +197,8 @@ struct EditorCanvasView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            Text("Ln \(cursorLine), Col \(cursorColumn)")
+                .monospacedDigit()
             Text(engine.connectionState.shortTitle)
                 .foregroundStyle(engine.connectionState.isOnline ? Color.secondary : Color.orange)
         }
@@ -209,6 +220,58 @@ struct EditorCanvasView: View {
         } else if usesVFS, !boundPath.isEmpty {
             Text("Saved")
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Line endings
+
+enum BufferLineEnding: Equatable, Sendable {
+    case lf
+    case crlf
+    case cr
+    case mixed
+
+    var statusLabel: String {
+        switch self {
+        case .lf: return "LF"
+        case .crlf: return "CRLF"
+        case .cr: return "CR"
+        case .mixed: return "Mixed"
+        }
+    }
+
+    /// Sample the start of `text`. `nil` when no line breaks are present.
+    static func detect(in text: String, sampleLimit: Int = 16_384) -> BufferLineEnding? {
+        var sawLF = false
+        var sawCRLF = false
+        var sawCR = false
+        var inspected = 0
+        var index = text.startIndex
+        let end = text.endIndex
+        while index < end, inspected < sampleLimit {
+            inspected += 1
+            let character = text[index]
+            let next = text.index(after: index)
+            if character == "\r" {
+                if next < end, text[next] == "\n" {
+                    sawCRLF = true
+                    index = text.index(after: next)
+                    inspected += 1
+                    continue
+                }
+                sawCR = true
+            } else if character == "\n" {
+                sawLF = true
+            }
+            index = next
+        }
+        switch (sawCRLF, sawLF, sawCR) {
+        case (false, false, false): return nil
+        case (true, false, false): return .crlf
+        case (false, true, false): return .lf
+        case (false, false, true): return .cr
+        default: return .mixed
         }
     }
 }

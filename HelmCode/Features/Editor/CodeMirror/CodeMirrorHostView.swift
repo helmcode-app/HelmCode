@@ -37,6 +37,8 @@ struct CodeMirrorHostView: UIViewRepresentable {
     var onTextChange: ((String) -> Void)?
     /// Explicit save (⌘S / menu). Text is the latest document body.
     var onSave: ((String) -> Void)?
+    /// 1-based caret line / column of the primary selection head.
+    var onCursorPosition: ((Int, Int) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -186,9 +188,7 @@ struct CodeMirrorHostView: UIViewRepresentable {
             case "ready":
                 markReady()
             case "toggleBookmark":
-                let line = body["line"] as? Int
-                    ?? (body["line"] as? Double).map { Int($0) }
-                    ?? 0
+                let line = Self.jsInt(body, "line")
                 let lineText = body["lineText"] as? String ?? ""
                 guard line >= 1 else { return }
                 DispatchQueue.main.async { [weak self] in
@@ -212,6 +212,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
                     self.lastPayloadKey = self.documentKey(forText: text)
                     self.parent.onTextChange?(text)
                     self.parent.onSave?(text)
+                }
+            case "cursorPosition":
+                let line = Self.jsInt(body, "line")
+                let column = Self.jsInt(body, "column")
+                guard line >= 1, column >= 1 else { return }
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.onCursorPosition?(line, column)
                 }
             default:
                 break
@@ -404,6 +411,13 @@ struct CodeMirrorHostView: UIViewRepresentable {
 
         private var bookmarkKey: String {
             parent.bookmarkLines.map(String.init).joined(separator: ",")
+        }
+
+        /// WKScriptMessage numbers arrive as Int or Double.
+        private static func jsInt(_ body: [String: Any], _ key: String) -> Int {
+            if let value = body[key] as? Int { return value }
+            if let value = body[key] as? Double { return Int(value) }
+            return 0
         }
 
         /// Encode any JSON value including top-level String (JSONSerialization rejects bare strings).

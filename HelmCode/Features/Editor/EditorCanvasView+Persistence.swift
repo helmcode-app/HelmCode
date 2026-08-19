@@ -67,6 +67,8 @@ extension EditorCanvasView {
         }
         boundPath = file.path
         isReadOnlyStream = file.size > VFSStreamDefaults.largeFileThreshold
+        cursorLine = 1
+        cursorColumn = 1
         await reloadBuffer(markSaved: true)
         takePendingReveal()
     }

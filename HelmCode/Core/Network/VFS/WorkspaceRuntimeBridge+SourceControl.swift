@@ -18,7 +18,11 @@ extension WorkspaceRuntimeBridge {
         guard session.selectedProjectID != nil else { return }
         guard vfs.connectionState.isReady else { return }
 
-        session.beginSourceControlLoading(force: forceLoading)
+        // Hard refresh (project switch / retry): show loading. Pull-to-refresh
+        // keeps the current snapshot so empty sections don't flash in then out.
+        if forceLoading {
+            session.beginSourceControlLoading(force: true)
+        }
         do {
             async let statusTask = vfs.gitStatus()
             async let refsTask = vfs.gitRefs()

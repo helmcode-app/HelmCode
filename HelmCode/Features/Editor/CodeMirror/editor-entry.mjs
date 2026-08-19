@@ -315,6 +315,32 @@ function postToHost(payload) {
   } catch (_) {}
 }
 
+/** 1-based line / column of the primary selection head (caret). */
+function cursorFromState(state) {
+  const head = state.selection.main.head
+  const line = state.doc.lineAt(head)
+  return { line: line.number, column: head - line.from + 1 }
+}
+
+function postCursorPosition(target) {
+  if (!target) return
+  const { line, column } = cursorFromState(target.state)
+  postToHost({ type: "cursorPosition", line, column })
+}
+
+function cursorPositionExtension() {
+  let lastLine = -1
+  let lastCol = -1
+  return EditorView.updateListener.of((update) => {
+    if (!update.selectionSet) return
+    const { line, column } = cursorFromState(update.state)
+    if (line === lastLine && column === lastCol) return
+    lastLine = line
+    lastCol = column
+    postToHost({ type: "cursorPosition", line, column })
+  })
+}
+
 /** Notify Swift of document edits (debounced). Host must not call setDocument for these. */
 let documentChangeTimer = null
 /** True while applying a host-driven hot reload (skip echo documentChange). */
@@ -949,6 +975,7 @@ function makeExtensions({ language, dark, readOnly, merge, original }) {
     }),
     EditorView.lineWrapping,
     ...(isMerge ? [] : [documentChangeExtension()]),
+    cursorPositionExtension(),
     editorKeymap(),
     // Higher precedence than defaults so zoom / IDE keys win when overlapping.
     helmEditorKeymap(),
@@ -1039,6 +1066,7 @@ function boot() {
       if (!isMerge) {
         applyBookmarkLines(view, lastBookmarkLines)
       }
+      postCursorPosition(view)
       requestAnimationFrame(() => view.requestMeasure())
     },
     /**
@@ -1077,6 +1105,7 @@ function boot() {
     goToLine(line) {
       if (!view) return
       goToLine(view, line)
+      postCursorPosition(view)
     },
     relayout() {
       view?.requestMeasure()
