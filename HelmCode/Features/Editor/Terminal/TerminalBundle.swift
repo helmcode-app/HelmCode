@@ -51,6 +51,34 @@ enum TerminalBundle {
     static var focusJavaScript: String { call("focus") }
     static var clearJavaScript: String { call("clear") }
 
+    static func sendInputJavaScript(_ data: String) -> String {
+        call("sendInput", rawArgs: JSONFragment.string(data))
+    }
+
+    static func setFontSizeJavaScript(_ size: Int) -> String {
+        call("setFontSize", rawArgs: "\(size)")
+    }
+
+    static var getSelectionTextJavaScript: String {
+        "\(jsGlobal) && \(jsGlobal).getSelectionText ? \(jsGlobal).getSelectionText() : ''"
+    }
+
+    static func getBufferSnippetJavaScript(maxLines: Int = 40) -> String {
+        "\(jsGlobal) && \(jsGlobal).getBufferSnippet ? \(jsGlobal).getBufferSnippet(\(maxLines)) : ''"
+    }
+
+    static func findNextJavaScript(query: String, incremental: Bool = false) -> String {
+        "\(jsGlobal) && \(jsGlobal).findNext && \(jsGlobal).findNext(\(JSONFragment.string(query)), { incremental: \(incremental) });"
+    }
+
+    static func findPreviousJavaScript(query: String) -> String {
+        "\(jsGlobal) && \(jsGlobal).findPrevious && \(jsGlobal).findPrevious(\(JSONFragment.string(query)));"
+    }
+
+    static var clearSearchJavaScript: String {
+        call("clearSearch")
+    }
+
     /// Apply light/dark xterm theme to match editor `systemBackground`.
     static func setColorSchemeJavaScript(isDark: Bool) -> String {
         let scheme = JSONFragment.string(isDark ? "dark" : "light")

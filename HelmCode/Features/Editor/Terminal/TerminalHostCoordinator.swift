@@ -246,6 +246,50 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
         webView?.evaluateJavaScript(script, completionHandler: nil)
     }
 
+    // MARK: - Actions
+
+    func sendInput(_ text: String) {
+        evaluate(TerminalBundle.sendInputJavaScript(text))
+    }
+
+    func clear() {
+        evaluate(TerminalBundle.clearJavaScript)
+    }
+
+    func setFontSize(_ size: Int) {
+        evaluate(TerminalBundle.setFontSizeJavaScript(size))
+    }
+
+    func extractSnippet(completion: @escaping (String) -> Void) {
+        guard let webView else {
+            completion("")
+            return
+        }
+        webView.evaluateJavaScript(TerminalBundle.getSelectionTextJavaScript) { [weak webView] result, _ in
+            if let selected = result as? String, !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                completion(selected)
+            } else if let webView {
+                webView.evaluateJavaScript(TerminalBundle.getBufferSnippetJavaScript(maxLines: 40)) { snippetResult, _ in
+                    completion(snippetResult as? String ?? "")
+                }
+            } else {
+                completion("")
+            }
+        }
+    }
+
+    func findNext(query: String, incremental: Bool = false) {
+        evaluate(TerminalBundle.findNextJavaScript(query: query, incremental: incremental))
+    }
+
+    func findPrevious(query: String) {
+        evaluate(TerminalBundle.findPreviousJavaScript(query: query))
+    }
+
+    func clearSearch() {
+        evaluate(TerminalBundle.clearSearchJavaScript)
+    }
+
     // MARK: - WKNavigationDelegate
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -278,6 +322,18 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
         switch type {
         case "ready":
             markPageReady()
+
+        case "readyInfo":
+            let shell = body["shell"] as? String ?? "shell"
+            let cols = body["cols"] as? Int ?? 0
+            let rows = body["rows"] as? Int ?? 0
+            parent.onReadyInfo?(shell, cols, rows)
+
+        case "searchResults":
+            let index = body["resultIndex"] as? Int ?? -1
+            let count = body["resultCount"] as? Int ?? 0
+            parent.controller?.searchResultIndex = index
+            parent.controller?.searchResultCount = count
 
         case "needTicket":
             lastAttemptToken = nil

@@ -74,7 +74,13 @@ struct EditorDetailView: View {
                     workspaceId: project.workspaceId,
                     sessionEpoch: terminalSessionEpoch,
                     onSessionEnded: handleShellExit,
-                    onHide: hideTerminal
+                    onHide: hideTerminal,
+                    onSendToAgent: { prompt in
+                        agent.prompt = prompt
+                        withAnimation(LayoutMetrics.panelSlideAnimation) {
+                            showCommander = true
+                        }
+                    }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .opacity(showingTerminal ? 1 : 0)

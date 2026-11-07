@@ -19,6 +19,7 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 // xterm.css is injected by rebuild-terminal.sh shim (esbuild text loader).
 
 /**
@@ -126,6 +127,20 @@ const term = new Terminal({
 const fitAddon = new FitAddon();
 term.loadAddon(fitAddon);
 term.loadAddon(new WebLinksAddon());
+const searchAddon = new SearchAddon();
+term.loadAddon(searchAddon);
+
+try {
+	searchAddon.onDidChangeResults?.((results) => {
+		postToHost({
+			type: "searchResults",
+			resultIndex: results ? results.resultIndex : -1,
+			resultCount: results ? results.resultCount : 0,
+		});
+	});
+} catch {
+	/* older search addon version */
+}
 term.open(document.getElementById("terminal"));
 
 let socket = null;
@@ -265,6 +280,12 @@ function handleControlMessage(msg) {
 	switch (msg.type) {
 		case "ready":
 			setStatus(`ready · ${msg.shell || "shell"}`, "ok");
+			postToHost({
+				type: "readyInfo",
+				shell: msg.shell || "shell",
+				cols: term.cols,
+				rows: term.rows,
+			});
 			break;
 		case "error":
 			term.writeln(`\r\n\x1b[31m[error] ${msg.message}\x1b[0m\r\n`);
@@ -517,8 +538,92 @@ window.HelmTerminal = {
 			/* ignore */
 		}
 	},
+	/** Clear scrollback/viewport but keep the current prompt line (xterm clear, not reset). */
 	clear() {
-		wipeTerminalBuffer();
+		try {
+			term.clear();
+		} catch {
+			/* ignore */
+		}
+	},
+	findNext(query, options = {}) {
+		if (typeof query !== "string" || !query) {
+			try {
+				searchAddon.clearDecorations?.();
+			} catch {
+				/* ignore */
+			}
+			return false;
+		}
+		return searchAddon.findNext(query, {
+			incremental: options.incremental === true,
+			caseSensitive: options.caseSensitive === true,
+			decorations: {
+				matchBackground: "#54431a",
+				matchBorder: "#e5a00d",
+				activeMatchBackground: "#a67308",
+				activeMatchBorder: "#ffcc00",
+			},
+		});
+	},
+	findPrevious(query, options = {}) {
+		if (typeof query !== "string" || !query) {
+			try {
+				searchAddon.clearDecorations?.();
+			} catch {
+				/* ignore */
+			}
+			return false;
+		}
+		return searchAddon.findPrevious(query, {
+			caseSensitive: options.caseSensitive === true,
+			decorations: {
+				matchBackground: "#54431a",
+				matchBorder: "#e5a00d",
+				activeMatchBackground: "#a67308",
+				activeMatchBorder: "#ffcc00",
+			},
+		});
+	},
+	clearSearch() {
+		try {
+			searchAddon.clearDecorations?.();
+		} catch {
+			/* ignore */
+		}
+	},
+	sendInput(data) {
+		if (typeof data !== "string") return;
+		if (!socket || socket.readyState !== WebSocket.OPEN) return;
+		socket.send(encoder.encode(data));
+	},
+	setFontSize(size) {
+		const s = Number(size);
+		if (!Number.isFinite(s) || s < 9 || s > 32) return;
+		term.options.fontSize = s;
+		fitAndNotify();
+	},
+	getSelectionText() {
+		try {
+			return term.getSelection() || "";
+		} catch {
+			return "";
+		}
+	},
+	getBufferSnippet(maxLines = 40) {
+		try {
+			const buf = term.buffer.active;
+			const total = buf.length;
+			const start = Math.max(0, total - maxLines);
+			const lines = [];
+			for (let i = start; i < total; i++) {
+				const line = buf.getLine(i);
+				if (line) lines.push(line.translateToString(true));
+			}
+			return lines.join("\n").trim();
+		} catch {
+			return "";
+		}
 	},
 	dispose() {
 		disposed = true;

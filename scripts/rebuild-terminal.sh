@@ -21,6 +21,7 @@ npm install \
   @xterm/xterm@5.5.0 \
   @xterm/addon-fit@0.10.0 \
   @xterm/addon-web-links@0.11.0 \
+  @xterm/addon-search@0.15.0 \
   --silent
 npm install -D esbuild --silent
 

@@ -19,7 +19,9 @@ struct TerminalHostView: UIViewRepresentable {
     var sessionEpoch: UInt64 = 0
     /// Panel on-screen (focus/fit). Hiding does not kill a live PTY.
     var isVisible: Bool = true
+    var controller: TerminalSessionController? = nil
     var onStatus: ((String, TerminalLinkStatus) -> Void)?
+    var onReadyInfo: ((String, Int, Int) -> Void)?
     var onSessionEnded: ((String) -> Void)?
 
     func makeCoordinator() -> TerminalHostCoordinator {
@@ -36,12 +38,14 @@ struct TerminalHostView: UIViewRepresentable {
         container.embed(webView)
         container.applySystemBackground()
         context.coordinator.bind(webView)
+        controller?.bind(context.coordinator)
         context.coordinator.loadTerminal()
         return container
     }
 
     func updateUIView(_ container: TerminalWebContainer, context: Context) {
         context.coordinator.parent = self
+        controller?.bind(context.coordinator)
         container.applySystemBackground()
         if let webView = container.webView {
             context.coordinator.bind(webView)
