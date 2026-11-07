@@ -9,17 +9,37 @@ import Foundation
 
 extension WorkspaceSession {
     /// Install / refresh a runner-backed project from a nested VFS tree.
-    /// Identity is the runner base URL (stable across launches).
+    /// Identity is runner URL + workspace id (one project per cloned repo).
     func applyVFSTree(
         _ tree: WorkspaceNode,
         remoteRoot: String,
         gitRemote: String? = nil,
         gitBranch: String? = nil,
-        runnerBaseURL: String? = nil
+        runnerBaseURL: String? = nil,
+        workspaceId: String? = nil
     ) {
         guard let normalizedURL = resolvedRunnerURL(explicit: runnerBaseURL) else { return }
-        let projectID = WorkspaceProject.stableID(forRunnerBaseURL: normalizedURL)
-        let existing = projectMatching(runnerURL: normalizedURL, preferredID: projectID)
+        let resolvedWorkspaceId = WorkspaceProject.normalizedWorkspaceId(workspaceId)
+        let pending = pendingRunnerBinding.flatMap { binding -> (url: String, runnerId: String)? in
+            RunnerURL.normalizeHTTP(binding.url) == normalizedURL ? binding : nil
+        }
+        let preferredID = WorkspaceProject.stableID(
+            forRunnerBaseURL: normalizedURL,
+            workspaceId: resolvedWorkspaceId
+        )
+        let byWorkspace = projects.first {
+            $0.normalizedRunnerURL == normalizedURL &&
+            $0.workspaceId == resolvedWorkspaceId
+        }
+        let byRunner = pending.flatMap { binding in
+            projects.first {
+                $0.runnerId == binding.runnerId && $0.workspaceId == resolvedWorkspaceId
+            }
+        }
+        let urlMatch = projectMatching(runnerURL: normalizedURL, preferredID: preferredID)
+        let existing = byWorkspace ?? byRunner ?? urlMatch
+        let projectID = existing?.id ?? preferredID
+        let runnerId = existing?.runnerId ?? pending?.runnerId
 
         let project = WorkspaceProject(
             id: projectID,
@@ -37,7 +57,8 @@ extension WorkspaceSession {
             runnerBaseURL: normalizedURL,
             // Preserve Project Settings overrides across VFS refresh.
             customName: existing?.customName,
-            apiToken: existing?.apiToken
+            runnerId: runnerId,
+            workspaceId: resolvedWorkspaceId
         )
 
         let previousSelection = selectedFileID
@@ -50,6 +71,9 @@ extension WorkspaceSession {
         let shouldOpen = existing == nil || selectedProjectID == nil
 
         upsertProject(project, replacing: existing?.id)
+        if pending?.runnerId == runnerId {
+            pendingRunnerBinding = nil
+        }
         persistProjects()
         syncSourceControlBranch(
             projectID: projectID,
@@ -71,12 +95,18 @@ extension WorkspaceSession {
     func applyVFSMetadata(
         gitRemote: String?,
         gitBranch: String?,
-        runnerBaseURL: String?
+        runnerBaseURL: String?,
+        workspaceId: String? = nil
     ) {
         guard let normalizedURL = resolvedRunnerURL(explicit: runnerBaseURL) else { return }
-        let projectID = WorkspaceProject.stableID(forRunnerBaseURL: normalizedURL)
+        let resolvedWorkspaceId = WorkspaceProject.normalizedWorkspaceId(workspaceId)
+        let projectID = WorkspaceProject.stableID(
+            forRunnerBaseURL: normalizedURL,
+            workspaceId: resolvedWorkspaceId
+        )
         guard let idx = projects.firstIndex(where: {
-            $0.id == projectID || $0.normalizedRunnerURL == normalizedURL
+            $0.id == projectID ||
+            ($0.normalizedRunnerURL == normalizedURL && $0.workspaceId == resolvedWorkspaceId)
         }) else {
             return
         }
@@ -117,8 +147,9 @@ extension WorkspaceSession {
 
     private func projectMatching(runnerURL: String, preferredID: String) -> WorkspaceProject? {
         if let hit = projects.first(where: { $0.id == preferredID }) { return hit }
-        if let hit = projects.first(where: { $0.normalizedRunnerURL == runnerURL }) { return hit }
-        if let hit = projects.first(where: { $0.id == WorkspaceProject.vfsRemoteID }) { return hit }
+        // Never fall back to "any project on this runner URL" — that collapses
+        // multiple workspaces into the first cloned repo.
+        _ = runnerURL
         return nil
     }
 
@@ -131,11 +162,13 @@ extension WorkspaceSession {
             projects.insert(project, at: 0)
         }
 
+        // One project per (runner URL, workspaceId) — not per runner URL alone.
         var seen = Set<String>()
         projects = projects.filter { item in
             guard let url = item.normalizedRunnerURL else { return true }
-            if seen.contains(url) { return false }
-            seen.insert(url)
+            let key = "\(url)#\(item.workspaceId)"
+            if seen.contains(key) { return false }
+            seen.insert(key)
             return true
         }
     }

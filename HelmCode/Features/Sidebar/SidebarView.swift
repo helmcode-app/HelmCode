@@ -6,7 +6,7 @@
 //  • No project — Projects list
 //  • Project open — navigator tabs (Files / Search / Bookmarks / SCM)
 //  • File open → EditorCanvasView streams via vfs/read_chunk (VFSStreamEngine)
-//  • Top bar — system sidebarToggle; global VFS status only when a project is open
+//  • Top — no visible title; trailing system sidebarToggle + non-interactive VFS status
 //  • Projects list — per-row runner reachability (list only)
 //  • Bottom — system safeAreaBar Settings row (material / soft edge)
 //
@@ -46,24 +46,21 @@ struct SidebarView: View {
                 projectsList
             }
         }
-        // Empty inline title keeps a standard nav bar so custom + system
-        // toolbar items share the same bar metrics / baseline.
-        .navigationTitle("")
+        // Title kept for accessibility / window naming only; hidden in the bar.
+        .navigationTitle("HelmCode")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar(removing: .title)
         .toolbar {
-            // Trailing: first item is closest to the edge (system toggle).
-            DefaultToolbarItem(kind: .sidebarToggle, placement: .topBarTrailing)
-            // Global VFS status only while a project is open (hide on welcome / project list).
+            // The system already places the sidebar toggle on the trailing edge.
+            // Declaring DefaultToolbarItem(.sidebarToggle) again leaves an empty glass capsule.
             if session.selectedProject != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     SidebarVFSStatusIcon(vfs: vfs)
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
-        }
-        .helmSidebarBottomChrome {
-            SidebarSettingsBar(action: onOpenSettings)
         }
         .task(id: session.projects.map(\.id).joined(separator: ",")) {
             runnerStatus.refresh(projects: session.projects, engine: engine)
@@ -97,6 +94,9 @@ struct SidebarView: View {
                 badges: navigatorBadges
             )
             navigatorContent(project)
+                .helmSidebarBottomChrome {
+                    SidebarSettingsBar(action: onOpenSettings)
+                }
         }
     }
 
@@ -137,7 +137,7 @@ struct SidebarView: View {
         List {
             Section {
                 if session.projects.isEmpty {
-                    Text("No projects yet. Use Open Project on the welcome page.")
+                    Text("No projects yet. Add a runner on the welcome page, then open its repository.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
@@ -172,6 +172,9 @@ struct SidebarView: View {
             }
         }
         .helmSidebarListStyle()
+        .helmSidebarBottomChrome {
+            SidebarSettingsBar(action: onOpenSettings)
+        }
         .projectSettingsSheet(
             projectID: $projectSettingsID,
             session: session,

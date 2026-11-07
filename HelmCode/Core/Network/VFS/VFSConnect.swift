@@ -41,6 +41,7 @@ enum VFSConnect {
     static func openSelfHosted(
         urlString: String,
         token: String? = nil,
+        workspaceId: String = HelmWorkspace.defaultID,
         engine: HelmCodeNetworkEngine,
         vfs: VFSNetworkEngine,
         session: WorkspaceSession,
@@ -50,6 +51,7 @@ enum VFSConnect {
     ) async throws -> VFSConnectOutcome {
         guard RunnerURL.isValid(urlString) else { throw VFSConnectError.invalidURL }
 
+        let resolvedWorkspaceId = WorkspaceProject.normalizedWorkspaceId(workspaceId)
         BackendConnectionSync.apply(
             urlString: urlString,
             token: token,
@@ -57,6 +59,8 @@ enum VFSConnect {
             vfs: vfs,
             agent: agent
         )
+        vfs.workspaceId = resolvedWorkspaceId
+        agent?.workspaceId = resolvedWorkspaceId
 
         await engine.checkBackendHealth()
         if case .offline(let message) = engine.connectionState {

@@ -7,6 +7,9 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ProjectSettingsSheet: View {
     @ObservedObject var session: WorkspaceSession
@@ -18,7 +21,6 @@ struct ProjectSettingsSheet: View {
 
     @State private var displayName: String = ""
     @State private var runnerURL: String = ""
-    @State private var apiToken: String = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
     @State private var runnerReachable = false
@@ -26,6 +28,11 @@ struct ProjectSettingsSheet: View {
     @State private var modelCatalog: [AgentModelOption] = []
     /// Bumped when returning from Models so UserDefaults curation is re-read.
     @State private var modelsPrefsStamp = 0
+    @State private var addDeviceTicket: SetupPairTicket?
+    @State private var addDeviceBusy = false
+    @State private var devices: [RunnerDeviceRecord] = []
+    @State private var pendingEnrollments: [SetupPendingEnrollment] = []
+    @State private var deviceBusyID: String?
 
     private var project: WorkspaceProject? {
         session.projects.first { $0.id == projectID }
@@ -40,7 +47,8 @@ struct ProjectSettingsSheet: View {
             Form {
                 nameSection
                 runnerURLSection
-                tokenSection
+                devicesSection
+                addDeviceSection
                 modelsSection
                 if let errorMessage {
                     Section {
@@ -77,13 +85,20 @@ struct ProjectSettingsSheet: View {
             .task(id: probeIdentity) {
                 await probeRunner()
             }
+            .task(id: normalizedDraftURL) {
+                await pollDevices()
+            }
             .interactiveDismissDisabled(isSaving)
         }
     }
 
-    /// Re-probe when URL or token draft changes.
+    /// Re-probe when the URL draft changes.
     private var probeIdentity: String {
-        "\(normalizedDraftURL)|\(apiToken)"
+        normalizedDraftURL
+    }
+
+    private var credential: String {
+        project?.deviceToken ?? ""
     }
 
     private var nameSection: some View {
@@ -109,16 +124,83 @@ struct ProjectSettingsSheet: View {
         }
     }
 
-    private var tokenSection: some View {
+    private var devicesSection: some View {
         Section {
-            SecureField("Bearer token (optional)", text: $apiToken)
-                .helmMonospacedFieldStyle()
-                .disabled(isSaving)
-                .textContentType(.password)
+            if devices.isEmpty {
+                Text(credential.isEmpty ? "Not enrolled on this iPad." : "No other devices reported.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(devices) { device in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.name)
+                            if device.current {
+                                Text("This iPad")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if !device.current {
+                            Button("Revoke", role: .destructive) {
+                                Task { await revoke(device) }
+                            }
+                            .disabled(deviceBusyID != nil)
+                        }
+                    }
+                }
+            }
+            ForEach(pendingEnrollments) { enrollment in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(enrollment.deviceName) wants to join")
+                    HStack {
+                        Button("Allow") {
+                            Task { await decide(enrollment, approve: true) }
+                        }
+                        Button("Deny", role: .destructive) {
+                            Task { await decide(enrollment, approve: false) }
+                        }
+                    }
+                    .disabled(deviceBusyID != nil)
+                }
+            }
         } header: {
-            Text("API Token")
+            Text("Devices")
         } footer: {
-            Text(Copy.tokenFooter)
+            Text(Copy.devicesFooter)
+        }
+    }
+
+    private var addDeviceSection: some View {
+        Section {
+            Button {
+                Task { await issueAddDeviceQR() }
+            } label: {
+                if addDeviceBusy {
+                    ProgressView()
+                } else {
+                    Label("Add device", systemImage: "qrcode")
+                }
+            }
+            .disabled(addDeviceBusy || credential.isEmpty)
+            if let ticket = addDeviceTicket {
+                Text(ticket.code)
+                    .font(.title2.monospaced())
+                    .tracking(4)
+                if let dataUrl = ticket.qrDataUrl,
+                   let img = pairingQRImage(dataUrl) {
+                    Image(uiImage: img)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .background(Color.white)
+                }
+            }
+        } header: {
+            Text("Pairing")
+        } footer: {
+            Text(Copy.addDeviceFooter)
         }
     }
 
@@ -128,7 +210,7 @@ struct ProjectSettingsSheet: View {
                 NavigationLink {
                     ModelsSettingsView(
                         baseURL: normalizedDraftURL,
-                        apiToken: apiToken,
+                        apiToken: credential,
                         agent: agent
                     )
                     .onDisappear {
@@ -194,7 +276,6 @@ struct ProjectSettingsSheet: View {
         }
         displayName = project.customName ?? ""
         runnerURL = project.normalizedRunnerURL ?? project.runnerBaseURL ?? ""
-        apiToken = project.apiToken ?? ""
     }
 
     private var canSave: Bool {
@@ -211,7 +292,7 @@ struct ProjectSettingsSheet: View {
         isProbingRunner = true
         defer { isProbingRunner = false }
         let url = normalizedDraftURL
-        let token = apiToken
+        let token = credential
         let online = await RunnerHealthProbe.isReachable(baseURL: url, apiToken: token)
         // Ignore stale results if the user edited the URL mid-probe.
         guard RunnerURL.normalizeHTTP(runnerURL) == url else { return }
@@ -266,7 +347,7 @@ struct ProjectSettingsSheet: View {
                 id: projectID,
                 customName: displayName,
                 runnerURL: runnerURL,
-                apiToken: apiToken
+                runnerId: project?.runnerId
             )
 
             if wasSelected {
@@ -276,13 +357,9 @@ struct ProjectSettingsSheet: View {
                     vfs: vfs,
                     agent: agent
                 )
-            } else if let project = session.projects.first(where: { $0.id == newID }),
-                      let token = project.apiToken,
-                      !token.isEmpty {
-                // Keep global remembered token in sync for other open flows.
+            } else if let saved = session.projects.first(where: { $0.id == newID }) {
                 RunnerConnectionPrefs.remember(
-                    url: project.normalizedRunnerURL ?? runnerURL,
-                    token: token
+                    url: saved.normalizedRunnerURL ?? runnerURL
                 )
             }
 
@@ -292,10 +369,105 @@ struct ProjectSettingsSheet: View {
         }
     }
 
+    @MainActor
+    private func issueAddDeviceQR() async {
+        addDeviceBusy = true
+        defer { addDeviceBusy = false }
+        errorMessage = nil
+        do {
+            let client = RunnerCoreAPIClient(
+                baseURLString: normalizedDraftURL,
+                apiToken: credential
+            )
+            addDeviceTicket = try await client.startDeviceInvite(url: normalizedDraftURL)
+        } catch {
+            errorMessage = RunnerAuthCopy.message(for: error)
+        }
+    }
+
+    @MainActor
+    private func pollDevices() async {
+        while !Task.isCancelled {
+            await refreshDevices()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+    }
+
+    @MainActor
+    private func refreshDevices() async {
+        guard !credential.isEmpty, RunnerURL.isValid(runnerURL) else {
+            devices = []
+            pendingEnrollments = []
+            return
+        }
+        let client = RunnerCoreAPIClient(
+            baseURLString: normalizedDraftURL,
+            apiToken: credential
+        )
+        if let listed = try? await client.listDevices() {
+            devices = listed.devices
+        }
+        if let pending = try? await client.listPendingEnrollments() {
+            pendingEnrollments = pending.enrollments
+        }
+    }
+
+    @MainActor
+    private func decide(_ enrollment: SetupPendingEnrollment, approve: Bool) async {
+        deviceBusyID = enrollment.id
+        defer { deviceBusyID = nil }
+        errorMessage = nil
+        let client = RunnerCoreAPIClient(
+            baseURLString: normalizedDraftURL,
+            apiToken: credential
+        )
+        do {
+            if approve {
+                try await client.approveEnrollment(id: enrollment.id)
+            } else {
+                try await client.denyEnrollment(id: enrollment.id)
+            }
+            await refreshDevices()
+        } catch {
+            errorMessage = RunnerAuthCopy.message(for: error)
+        }
+    }
+
+    @MainActor
+    private func revoke(_ device: RunnerDeviceRecord) async {
+        deviceBusyID = device.id
+        defer { deviceBusyID = nil }
+        errorMessage = nil
+        let client = RunnerCoreAPIClient(
+            baseURLString: normalizedDraftURL,
+            apiToken: credential
+        )
+        do {
+            try await client.revokeDevice(id: device.id)
+            await refreshDevices()
+        } catch {
+            errorMessage = RunnerAuthCopy.message(for: error)
+        }
+    }
+
+#if canImport(UIKit)
+    private func pairingQRImage(_ dataUrl: String) -> UIImage? {
+        let prefix = "data:image/png;base64,"
+        guard dataUrl.hasPrefix(prefix),
+              let data = Data(base64Encoded: String(dataUrl.dropFirst(prefix.count))) else {
+            return nil
+        }
+        return UIImage(data: data)
+    }
+#endif
+
     private enum Copy {
         static let nameFooter = "Leave empty to use the name from the runner / git remote."
         static let runnerFooter = "HTTP, VFS (/v1/vfs), Agent sessions (/v1/sessions), and Terminal share this host."
-        static let tokenFooter = "Required only when the runner sets OPENCORE_API_TOKEN."
+        static let devicesFooter =
+            "Each device has its own token. Revoke removes that device only. If every device is gone, run setup:recover on the runner."
+        static let addDeviceFooter =
+            "Shows a short code for another iPad. Allow the request here before that iPad receives a token."
         static let modelsFooter =
             "Choose which models appear in the Commander picker. Does not change provider auth on the server."
         static let modelsProbingFooter = "Checking whether the Runner URL is reachable…"

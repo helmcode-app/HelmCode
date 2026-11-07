@@ -17,7 +17,11 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
     let remote: String
     let defaultBranch: String
     let runnerBaseURL: String
-    /// Optional Bearer for this runner; omit when empty.
+    /// Stable runner identity. The device token is not stored here.
+    let runnerId: String?
+    /// Runner workspace id (`default` when omitted on older saves).
+    let workspaceId: String?
+    /// Legacy shared Bearer. Ignored on load.
     let apiToken: String?
 
     init(
@@ -27,6 +31,8 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
         defaultBranch: String,
         runnerBaseURL: String,
         customName: String? = nil,
+        runnerId: String? = nil,
+        workspaceId: String? = nil,
         apiToken: String? = nil
     ) {
         self.id = id
@@ -35,6 +41,8 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
         self.remote = remote
         self.defaultBranch = defaultBranch
         self.runnerBaseURL = runnerBaseURL
+        self.runnerId = runnerId
+        self.workspaceId = workspaceId
         self.apiToken = apiToken
     }
 
@@ -50,7 +58,9 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
         self.remote = project.remote
         self.defaultBranch = project.defaultBranch
         self.runnerBaseURL = RunnerURL.normalizeHTTP(url)
-        self.apiToken = project.apiToken
+        self.runnerId = project.runnerId
+        self.workspaceId = project.workspaceId
+        self.apiToken = nil
     }
 
     /// Placeholder tree until VFS reconnects and fills children.
@@ -69,7 +79,8 @@ struct SavedProjectRecord: Codable, Equatable, Sendable, Identifiable {
             root: WorkspaceNode.emptyRoot(name: rootName),
             runnerBaseURL: runnerBaseURL,
             customName: customName,
-            apiToken: apiToken
+            runnerId: runnerId,
+            workspaceId: workspaceId
         )
     }
 }

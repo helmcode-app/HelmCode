@@ -9,5 +9,18 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HelmCode connects to your local or LAN runner-core agent for AI coding tasks.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the runner pairing QR code to connect without typing the API token.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.helmcode.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>helmcode</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

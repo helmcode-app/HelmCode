@@ -45,22 +45,25 @@ struct SidebarEmptyPlaceholder: View {
     }
 }
 
-// MARK: - VFS status (sidebar top trailing, with system collapse)
+// MARK: - VFS status (sidebar top trailing, beside system collapse)
 
-/// Global VFS connection glyph for the sidebar **system** toolbar (top trailing).
-/// Shown only when a project is open (`SidebarView` gates placement).
+/// Global VFS connection glyph. Shown beside the sidebar collapse control
+/// only while a project is open. Not a control — no glass, no hit testing.
 /// Independent of per-project list trailing icons (`ProjectRunnerStatusIcon`).
 struct SidebarVFSStatusIcon: View {
     @ObservedObject var vfs: VFSNetworkEngine
 
     var body: some View {
         let state = vfs.connectionState
-        Label(state.shortTitle, systemImage: state.toolbarSystemImage)
-            .labelStyle(.iconOnly)
+        Image(systemName: state.toolbarSystemImage)
+            .font(.body)
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(state.toolbarTint)
             .accessibilityLabel(state.shortTitle)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityRemoveTraits(.isButton)
             .help(helpText)
+            .allowsHitTesting(false)
     }
 
     private var helpText: String {
@@ -77,33 +80,29 @@ struct SidebarVFSStatusIcon: View {
 // MARK: - Settings bar
 
 /// Settings row in the system bottom safe-area bar.
-/// Uses a sidebar `List` so leading inset / body metrics match navigator lists.
-/// Scroll background is hidden so the bar material and edge fade remain visible.
+/// A plain button, not a sidebar `List`: a list in this column joins the split-view
+/// selection and makes the navigator tabs flash when the settings sheet opens.
 struct SidebarSettingsBar: View {
     var action: () -> Void
 
     var body: some View {
-        List {
-            Button(action: action) {
-                Label {
-                    Text("Settings")
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                } icon: {
-                    Image(systemName: "gearshape")
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .symbolRenderingMode(.monochrome)
-                }
+        Button(action: action) {
+            Label {
+                Text("Settings")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "gearshape")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .symbolRenderingMode(.monochrome)
             }
-            .buttonStyle(.plain)
-            .listItemTint(.primary)
-            .accessibilityHint("Opens app settings")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .scrollDisabled(true)
-        .scrollIndicators(.hidden)
-        .frame(maxHeight: 52)
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens app settings")
     }
 }

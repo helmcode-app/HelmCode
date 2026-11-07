@@ -194,10 +194,7 @@ extension AgentNetworkEngine {
         if let modes = session.modes {
             advertisedModes = modes
         }
-        if let wid = session.workspaceId?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !wid.isEmpty {
-            workspaceId = wid
-        }
+        // workspaceId is owned by the open project; session meta must not move VFS.
         if let usage = session.usage {
             sessionUsage = usage
         }
@@ -239,15 +236,11 @@ extension AgentNetworkEngine {
         }
     }
 
-    /// Bind to the runner's default workspace (VFS / terminal follow this id).
+    /// Probe `/v1/workspaces` for connectivity. Does not change the active workspaceId —
+    /// that is owned by the open project (runner URL + workspace).
     func refreshWorkspaces() async {
         do {
-            let envelope = try await api.listWorkspaces()
-            let id = (envelope.defaultWorkspaceId ?? HelmWorkspace.defaultID)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !id.isEmpty {
-                workspaceId = id
-            }
+            _ = try await api.listWorkspaces()
         } catch {
             log.debug("listWorkspaces soft-fail: \(error.localizedDescription, privacy: .public)")
         }

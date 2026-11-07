@@ -33,6 +33,11 @@ struct WorkspaceRuntimeModifier: ViewModifier {
                 syncEnginesAndStatus()
             }
             .onChange(of: agent.workspaceId) { _, id in
+                // Only follow agent → VFS when it matches the open project.
+                // Agent boot used to reset workspaceId to `default` and yank every
+                // secondary repo back to the primary tree.
+                let selected = session.selectedProject?.workspaceId
+                if let selected, id != selected { return }
                 if vfs.workspaceId != id {
                     vfs.workspaceId = id
                 }

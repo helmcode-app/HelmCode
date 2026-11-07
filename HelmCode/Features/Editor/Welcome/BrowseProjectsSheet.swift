@@ -19,30 +19,28 @@ struct BrowseProjectsSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(session.projects) { project in
-                Button {
-                    session.openProject(project.id)
-                    isPresented = false
-                } label: {
-                    ProjectListLabel(
-                        project: project,
-                        secondary: .branchRemote,
-                        runnerStatus: runnerStatus.displayStatus(
-                            for: project,
-                            engine: engine,
-                            vfs: vfs
-                        )
-                    )
-                    .foregroundStyle(.primary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if session.projects.isEmpty {
+                        Text("No projects yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    } else {
+                        InsetGroupedCard {
+                            ForEach(Array(session.projects.enumerated()), id: \.element.id) { index, project in
+                                if index > 0 { InsetGroupedRowDivider() }
+                                projectRow(project)
+                            }
+                        }
+                    }
                 }
-                .contextMenu {
-                    ProjectListContextMenu(
-                        project: project,
-                        onProjectSettings: { projectSettingsID = project.id },
-                        onRemoveProject: { session.removeProject(project.id) }
-                    )
-                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
+            .background(Color(.systemGroupedBackground))
             .helmInlineNavigationTitle("Projects")
             .helmSheetCloseToolbar {
                 isPresented = false
@@ -56,6 +54,31 @@ struct BrowseProjectsSheet: View {
                 engine: engine,
                 vfs: vfs,
                 agent: agent
+            )
+        }
+    }
+
+    private func projectRow(_ project: WorkspaceProject) -> some View {
+        Button {
+            session.openProject(project.id)
+            isPresented = false
+        } label: {
+            IconListRow(
+                project: project,
+                runnerStatus: runnerStatus.displayStatus(
+                    for: project,
+                    engine: engine,
+                    vfs: vfs
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            ProjectListContextMenu(
+                project: project,
+                onProjectSettings: { projectSettingsID = project.id },
+                onRemoveFromRecents: { session.removeFromRecents(project.id) },
+                onRemoveProject: { session.removeProject(project.id) }
             )
         }
     }

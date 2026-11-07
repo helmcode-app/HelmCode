@@ -30,18 +30,18 @@ enum TerminalBundle {
 
     static func configureJavaScript(
         baseURL: String,
-        token: String,
+        ticket: String,
         workspaceId: String = HelmWorkspace.defaultID
     ) -> String {
-        call("configure", argsObject: connectionArgs(baseURL: baseURL, token: token, workspaceId: workspaceId))
+        call("configure", argsObject: connectionArgs(baseURL: baseURL, ticket: ticket, workspaceId: workspaceId))
     }
 
     static func connectJavaScript(
         baseURL: String,
-        token: String,
+        ticket: String,
         workspaceId: String = HelmWorkspace.defaultID
     ) -> String {
-        call("connect", argsObject: connectionArgs(baseURL: baseURL, token: token, workspaceId: workspaceId))
+        call("connect", argsObject: connectionArgs(baseURL: baseURL, ticket: ticket, workspaceId: workspaceId))
     }
 
     static var disconnectJavaScript: String { call("disconnect") }
@@ -61,10 +61,10 @@ enum TerminalBundle {
 
     private static func connectionArgs(
         baseURL: String,
-        token: String,
+        ticket: String,
         workspaceId: String
     ) -> String {
-        "{ baseURL: \(JSONFragment.string(baseURL)), token: \(JSONFragment.string(token)), workspaceId: \(JSONFragment.string(workspaceId)) }"
+        "{ baseURL: \(JSONFragment.string(baseURL)), ticket: \(JSONFragment.string(ticket)), workspaceId: \(JSONFragment.string(workspaceId)) }"
     }
 
     private static func call(_ method: String, argsObject: String? = nil, rawArgs: String? = nil) -> String {

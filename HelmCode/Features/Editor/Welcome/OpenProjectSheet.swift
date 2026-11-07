@@ -2,12 +2,15 @@
 //  OpenProjectSheet.swift
 //  HelmCode
 //
-//  Open Project: Hosted (reserved) | Self-hosted (runner URL + optional token).
-//  This is the only place to bind a workspace to a runner-core instance.
+//  Add Runner: Hosted (reserved) | Self-hosted (URL + setup code).
+//  Pairing does not open a project. The runner page authorizes the repository.
 //  Form pieces: OpenProjectSelfHostedForm, OpenProjectHostedPlaceholder.
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 private enum OpenProjectDeploymentTab: String, CaseIterable, Identifiable {
     case hosted
@@ -32,9 +35,12 @@ struct OpenProjectSheet: View {
 
     @State private var tab: OpenProjectDeploymentTab = .selfHosted
     @State private var runnerURL: String = ""
-    @State private var apiToken: String = ""
+    @State private var deviceName: String = ""
+    @State private var pairingCode: String = ""
     @State private var isConnecting = false
+    @State private var statusText: String?
     @State private var errorMessage: String?
+    @State private var pairedRunner: EnrolledRunner?
 
     var body: some View {
         NavigationStack {
@@ -44,7 +50,18 @@ struct OpenProjectSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .background(Color(.systemGroupedBackground))
-            .helmInlineNavigationTitle("Open Project")
+            .helmInlineNavigationTitle("Add Runner")
+            .navigationDestination(item: $pairedRunner) { runner in
+                RunnerSetupView(
+                    runner: runner,
+                    session: session,
+                    engine: engine,
+                    vfs: vfs,
+                    agent: agent,
+                    onClose: { isPresented = false },
+                    onOpened: { isPresented = false }
+                )
+            }
             .helmSheetCloseToolbar(disabled: isConnecting) {
                 isPresented = false
             }
@@ -52,9 +69,27 @@ struct OpenProjectSheet: View {
                 if runnerURL.isEmpty {
                     runnerURL = RunnerConnectionPrefs.lastURL()
                 }
-                if apiToken.isEmpty {
-                    apiToken = RunnerConnectionPrefs.apiToken()
+                if deviceName.isEmpty {
+                    #if canImport(UIKit)
+                    deviceName = UIDevice.current.name
+                    #else
+                    deviceName = "iPad"
+                    #endif
                 }
+                if let url = RunnerPairingInbox.pending,
+                   let parsed = RunnerPairingLink.parse(url) {
+                    RunnerPairingInbox.pending = nil
+                    runnerURL = parsed.runnerURL
+                    pairingCode = parsed.code
+                    Task { await connectSelfHosted() }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .helmPairingLink)) { note in
+                guard let url = note.userInfo?["url"] as? URL,
+                      let parsed = RunnerPairingLink.parse(url) else { return }
+                runnerURL = parsed.runnerURL
+                pairingCode = parsed.code
+                Task { await connectSelfHosted() }
             }
             .alert(
                 "Couldn’t connect",
@@ -92,9 +127,17 @@ struct OpenProjectSheet: View {
         case .selfHosted:
             OpenProjectSelfHostedForm(
                 runnerURL: $runnerURL,
-                apiToken: $apiToken,
+                deviceName: $deviceName,
+                pairingCode: $pairingCode,
                 isConnecting: isConnecting,
-                onConfirm: { Task { await connectSelfHosted() } }
+                statusText: statusText,
+                onConfirm: { Task { await connectSelfHosted() } },
+                onPairingLink: { url in
+                    guard let parsed = RunnerPairingLink.parse(url) else { return }
+                    runnerURL = parsed.runnerURL
+                    pairingCode = parsed.code
+                    Task { await connectSelfHosted() }
+                }
             )
         }
     }
@@ -107,31 +150,58 @@ struct OpenProjectSheet: View {
         defer { isConnecting = false }
 
         let url = RunnerURL.normalizeHTTP(runnerURL)
-        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = pairingCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        statusText = nil
 
         do {
-            _ = try await VFSConnect.openSelfHosted(
-                urlString: url,
-                token: token.isEmpty ? nil : token,
-                engine: engine,
-                vfs: vfs,
-                session: session,
-                agent: agent
-            )
-            RunnerConnectionPrefs.remember(url: url, token: token)
-            // Stamp token onto the opened project so Project Settings / reopen use it.
-            if let id = session.selectedProjectID,
-               let project = session.projects.first(where: { $0.id == id }) {
-                _ = try? session.updateProjectSettings(
-                    id: id,
-                    customName: project.customName ?? "",
-                    runnerURL: url,
-                    apiToken: token
-                )
+            let client = RunnerCoreAPIClient(baseURLString: url, apiToken: "")
+            var enrolled = try await client.enrollDevice(code: code, deviceName: name)
+            if enrolled.status == "pending", let enrollmentId = enrolled.enrollmentId {
+                statusText = "Waiting for the other device to allow \(name)."
+                enrolled = try await pollEnrollment(client: client, id: enrollmentId)
             }
-            isPresented = false
+            guard enrolled.status == "complete",
+                  let token = enrolled.token,
+                  let runnerId = enrolled.runnerId else {
+                throw SetupEnrollError.missingToken
+            }
+            RunnerCredentialStore.save(runnerId: runnerId, token: token)
+            session.rememberEnrolledRunner(url: url, runnerId: runnerId, label: name)
+            RunnerConnectionPrefs.remember(url: url)
+            pairingCode = ""
+            statusText = nil
+            pairedRunner = EnrolledRunner(
+                id: runnerId,
+                url: url,
+                label: EnrolledRunner.hostLabel(for: url)
+            )
+        } catch is CancellationError {
+            statusText = nil
         } catch {
-            errorMessage = error.localizedDescription
+            statusText = nil
+            errorMessage = RunnerAuthCopy.message(for: error)
         }
+    }
+
+    private func pollEnrollment(
+        client: RunnerCoreAPIClient,
+        id: String
+    ) async throws -> SetupEnrollResponse {
+        for _ in 0..<300 {
+            if !isPresented { throw CancellationError() }
+            let polled = try await client.pollEnrollment(id: id)
+            switch polled.status {
+            case "complete":
+                return polled
+            case "denied":
+                throw SetupEnrollError.denied
+            case "expired":
+                throw SetupEnrollError.expired
+            default:
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+        throw SetupEnrollError.expired
     }
 }

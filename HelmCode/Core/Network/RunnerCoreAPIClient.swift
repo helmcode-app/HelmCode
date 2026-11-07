@@ -34,8 +34,106 @@ struct RunnerCoreAPIClient: Sendable {
         try await get(path: "/health", authorize: false)
     }
 
+    func setupStatus() async throws -> SetupPublicStatus {
+        try await get(path: "/v1/setup", authorize: false)
+    }
+
+    func enrollDevice(code: String, deviceName: String) async throws -> SetupEnrollResponse {
+        try await post(
+            path: "/v1/setup/enroll",
+            body: SetupEnrollBody(code: code, deviceName: deviceName),
+            expectedStatus: 200,
+            authorize: false
+        )
+    }
+
+    func pollEnrollment(id: String) async throws -> SetupEnrollResponse {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await get(
+            path: "/v1/setup/enrollments/\(encoded)",
+            authorize: false
+        )
+    }
+
+    func startDeviceInvite(url: String) async throws -> SetupPairTicket {
+        try await post(
+            path: "/v1/setup/invites",
+            body: SetupInviteBody(url: url),
+            expectedStatus: 200
+        )
+    }
+
+    func listDevices() async throws -> SetupDevicesResponse {
+        try await get(path: "/v1/setup/devices", authorize: true)
+    }
+
+    func listPendingEnrollments() async throws -> SetupEnrollmentsResponse {
+        try await get(path: "/v1/setup/enrollments", authorize: true)
+    }
+
+    func approveEnrollment(id: String) async throws {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let _: OkResponse = try await postEmpty(
+            path: "/v1/setup/enrollments/\(encoded)/approve",
+            expectedStatus: 200
+        )
+    }
+
+    func denyEnrollment(id: String) async throws {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let _: OkResponse = try await postEmpty(
+            path: "/v1/setup/enrollments/\(encoded)/deny",
+            expectedStatus: 200
+        )
+    }
+
+    func revokeDevice(id: String) async throws {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let _: OkResponse = try await perform(
+            try makeRequest(
+                path: "/v1/setup/devices/\(encoded)",
+                method: "DELETE",
+                authorize: true
+            ),
+            expectedStatus: 200
+        )
+    }
+
+    func createWsTicket() async throws -> WsTicketResponse {
+        try await postEmpty(path: "/v1/setup/ws-tickets", expectedStatus: 200)
+    }
+
     func status() async throws -> RuntimeStatus {
         try await get(path: "/v1/status", authorize: true)
+    }
+
+    func setupSession() async throws -> SetupSessionStatus {
+        try await get(path: "/v1/setup/session", authorize: true)
+    }
+
+    func startGithub() async throws -> GithubDeviceStart {
+        try await postEmpty(path: "/v1/setup/github/start", expectedStatus: 200)
+    }
+
+    func pollGithub() async throws -> GithubPollResponse {
+        try await get(path: "/v1/setup/github/poll", authorize: true)
+    }
+
+    func listGithubRepos() async throws -> [GithubRepoRecord] {
+        let envelope: GithubReposResponse = try await get(
+            path: "/v1/setup/github/repos",
+            authorize: true
+        )
+        return envelope.repos
+    }
+
+    func cloneGithubRepo(owner: String, repo: String) async throws -> SetupSessionStatus {
+        try await post(
+            path: "/v1/setup/github/clone",
+            body: GithubCloneBody(owner: owner, repo: repo),
+            expectedStatus: 200,
+            timeoutInterval: 300
+        )
     }
 
     // MARK: - Agent sessions (`/v1/sessions/*`)
@@ -139,11 +237,23 @@ struct RunnerCoreAPIClient: Sendable {
     private func post<T: Decodable, B: Encodable>(
         path: String,
         body: B,
-        expectedStatus: Int
+        expectedStatus: Int,
+        authorize: Bool = true,
+        timeoutInterval: TimeInterval = 0
     ) async throws -> T {
         let data = try encoder.encode(body)
-        let request = try makeRequest(path: path, method: "POST", authorize: true, bodyData: data)
+        let request = try makeRequest(
+            path: path,
+            method: "POST",
+            authorize: authorize,
+            bodyData: data,
+            timeoutInterval: timeoutInterval
+        )
         return try await perform(request, expectedStatus: expectedStatus)
+    }
+
+    private struct OkResponse: Decodable {
+        let ok: Bool?
     }
 
     private func postEmpty<T: Decodable>(path: String, expectedStatus: Int) async throws -> T {
@@ -164,7 +274,8 @@ struct RunnerCoreAPIClient: Sendable {
         path: String,
         method: String,
         authorize: Bool,
-        bodyData: Data? = nil
+        bodyData: Data? = nil,
+        timeoutInterval: TimeInterval = 0
     ) throws -> URLRequest {
         let root = try baseURL()
         guard let url = URL(string: path, relativeTo: root)?.absoluteURL else {
@@ -174,7 +285,7 @@ struct RunnerCoreAPIClient: Sendable {
         request.httpMethod = method
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Accept")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.timeoutInterval = method == "POST" ? 60 : 15
+        request.timeoutInterval = timeoutInterval > 0 ? timeoutInterval : (method == "POST" ? 60 : 15)
 
         if authorize {
             let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -62,8 +62,7 @@ Column empty states: `FeatureEmptyPlaceholder` (icon) vs `SidebarEmptyPlaceholde
 **Terminal session:** kept alive across ⌘J hide/show; wiped on project switch/close or shell `exit`.  
 Details: `Features/Editor/Terminal/WebSSH.md`.
 
-**Welcome → Open Project:** Hosted (placeholder) | Self-hosted URL (`OpenProjectSheet`).  
-Projects are **only** added via Open Project (no seed mocks). Metadata is cached in `UserDefaults`; trees reload from VFS on open.  
+**Welcome → Add Runner:** Hosted (placeholder) | Self-hosted URL + setup code (`OpenProjectSheet`). Pairing lands on `RunnerSetupSheet` (GitHub authorize + clone, or open the repo already on disk). A project is created only when that repository is opened — not when the runner connects. Metadata is cached in `UserDefaults`; trees reload from VFS on open.  
 **Recent:** up to 5 rows; **More…** opens `BrowseProjectsSheet` when there are more.
 
 ### Sidebar
@@ -135,7 +134,7 @@ Default: `http://127.0.0.1:18080` (Docker host port → container `8080`; see ru
 | `AgentNetworkEngine` | `/v1/sessions` client (create / prompt / history / cancel / rewind) |
 | `HelmCodeNetworkEngine` | `GET /health` + `GET /v1/status` probe only |
 
-Optional Bearer (`OPENCORE_API_TOKEN`): enter when **Open Project → Self-hosted** (stored for reopens; not a separate Settings backend).
+Device token: enter the runner URL and the short setup code (`SDCN-9XZS`) in **Open Project → Self-hosted**. The token is stored in the Keychain, not in project metadata.
 
 ## CodeMirror 6
 

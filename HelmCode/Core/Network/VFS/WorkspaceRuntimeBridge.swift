@@ -22,7 +22,8 @@ enum WorkspaceRuntimeBridge {
             remoteRoot: root,
             gitRemote: vfs.workspaceRemote,
             gitBranch: vfs.workspaceBranch,
-            runnerBaseURL: engine.baseURLString
+            runnerBaseURL: engine.baseURLString,
+            workspaceId: vfs.workspaceId
         )
     }
 
@@ -36,7 +37,8 @@ enum WorkspaceRuntimeBridge {
         session.applyVFSMetadata(
             gitRemote: vfs.workspaceRemote,
             gitBranch: vfs.workspaceBranch,
-            runnerBaseURL: engine.baseURLString
+            runnerBaseURL: engine.baseURLString,
+            workspaceId: vfs.workspaceId
         )
     }
 
@@ -61,13 +63,13 @@ enum WorkspaceRuntimeBridge {
         let current = RunnerURL.normalizeHTTP(engine.baseURLString).lowercased()
         let target = url.lowercased()
 
-        // Prefer this project's token, then last Open Project / Project Settings value.
-        let projectToken = project.apiToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let remembered = RunnerConnectionPrefs.apiToken()
-        let token = !projectToken.isEmpty ? projectToken : remembered
+        let token = project.deviceToken ?? ""
         if engine.apiToken != token {
             engine.apiToken = token
         }
+
+        let workspaceId = project.workspaceId
+        agent.workspaceId = workspaceId
 
         if current != target {
             BackendConnectionSync.apply(
@@ -78,7 +80,7 @@ enum WorkspaceRuntimeBridge {
                 agent: agent
             )
             await engine.checkBackendHealth()
-            vfs.workspaceId = agent.workspaceId
+            vfs.workspaceId = workspaceId
             vfs.start()
             agent.bindToProjectRunner(from: engine)
             return
@@ -86,9 +88,10 @@ enum WorkspaceRuntimeBridge {
 
         BackendConnectionSync.syncVFS(from: engine, to: vfs)
         BackendConnectionSync.syncAgent(from: engine, to: agent)
-        vfs.workspaceId = agent.workspaceId
+        let workspaceChanged = vfs.workspaceId != workspaceId
+        vfs.workspaceId = workspaceId
 
-        if !vfs.connectionState.isReady {
+        if workspaceChanged || !vfs.connectionState.isReady {
             await engine.checkBackendHealth()
             vfs.start()
         }

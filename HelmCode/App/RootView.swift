@@ -63,6 +63,7 @@ struct RootView: View {
                 vfs: vfs,
                 agent: agent,
                 runnerStatus: runnerStatus,
+                columnVisibility: $columnVisibility,
                 onOpenSettings: { isSettingsPresented = true }
             )
         }
@@ -81,7 +82,6 @@ struct RootView: View {
             NavigationStack {
                 SettingsView()
             }
-            .preferredColorScheme(appearance.preferredColorScheme)
         }
         .modifier(
             WorkspaceRuntimeModifier(
@@ -96,9 +96,12 @@ struct RootView: View {
             applySidebarVisibility(showSidebar)
         }
         .onChange(of: showSidebar) { _, show in
-            applySidebarVisibility(show)
+            applySidebarVisibility(show, animated: !isSettingsPresented)
         }
         .onChange(of: columnVisibility) { _, visibility in
+            // Sheet presentation can flicker column visibility. Don't write that
+            // back into AppStorage or the sidebar (and its tabs) animate.
+            guard !isSettingsPresented else { return }
             let visible = visibility != .detailOnly
             if showSidebar != visible {
                 showSidebar = visible
@@ -106,12 +109,15 @@ struct RootView: View {
         }
     }
 
-    private func applySidebarVisibility(_ show: Bool) {
+    private func applySidebarVisibility(_ show: Bool, animated: Bool = true) {
         let target: NavigationSplitViewVisibility = show ? .all : .detailOnly
-        if columnVisibility != target {
+        guard columnVisibility != target else { return }
+        if animated {
             withAnimation(LayoutMetrics.panelSlideAnimation) {
                 columnVisibility = target
             }
+        } else {
+            columnVisibility = target
         }
     }
 }

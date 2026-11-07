@@ -134,7 +134,7 @@ let autoReconnect = true;
 let resizeTimer = null;
 let pingTimer = null;
 let baseURL = "";
-let apiToken = "";
+let wsTicket = "";
 let workspaceId = "default";
 
 const encoder = new TextEncoder();
@@ -161,7 +161,7 @@ function toWsUrl(httpBase, cols, rows) {
 	u.search = "";
 	u.searchParams.set("cols", String(cols));
 	u.searchParams.set("rows", String(rows));
-	if (apiToken) u.searchParams.set("token", apiToken);
+	if (wsTicket) u.searchParams.set("ticket", wsTicket);
 	if (workspaceId) u.searchParams.set("workspaceId", workspaceId);
 	return u.toString();
 }
@@ -409,7 +409,9 @@ function connect() {
 		setStatus(`disconnected (${ev.code})`, "err");
 		if (!disposed && autoReconnect) {
 			setTimeout(() => {
-				if (!disposed && autoReconnect && gen === connectGeneration) connect();
+				if (!disposed && autoReconnect && gen === connectGeneration) {
+					postToHost({ type: "needTicket" });
+				}
 			}, 2000);
 		}
 	});
@@ -445,9 +447,9 @@ if (typeof ResizeObserver !== "undefined") {
 
 // Bridge for Swift host
 window.HelmTerminal = {
-	configure({ baseURL: base, token, workspaceId: ws } = {}) {
+	configure({ baseURL: base, ticket, workspaceId: ws } = {}) {
 		if (typeof base === "string") baseURL = base.trim();
-		if (typeof token === "string") apiToken = token.trim();
+		if (typeof ticket === "string") wsTicket = ticket.trim();
 		if (typeof ws === "string" && ws.trim()) workspaceId = ws.trim();
 	},
 	/**

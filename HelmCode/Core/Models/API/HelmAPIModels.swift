@@ -68,6 +68,7 @@ struct RuntimeStatus: Codable, Sendable, Equatable {
     let vfsEnabled: Bool?
     let terminalEnabled: Bool?
     let defaultWorkspaceId: String?
+    let setupPhase: String?
 }
 
 // MARK: - Timeline / result (session history → EventLog)

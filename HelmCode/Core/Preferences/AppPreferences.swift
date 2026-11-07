@@ -28,7 +28,9 @@ enum AppStorageKey {
     static let sidebarNavigator = "helm.sidebar.navigator"
     /// Last successful Open Project runner URL (prefill only).
     static let lastRunnerURL = "helm.runner.lastURL"
-    /// Optional Bearer for open-core (`OPENCORE_API_TOKEN`); applied when opening / reactivating projects.
+    /// JSON-encoded `[EnrolledRunner]` (paired machines, not projects).
+    static let enrolledRunners = "helm.runner.enrolled"
+    /// Legacy shared Bearer. Cleared on launch; tokens live in the Keychain.
     static let runnerAPIToken = "helm.runner.apiToken"
     /// Center column shows Terminal instead of the code editor when true.
     static let showTerminal = "helm.column.showTerminal"
@@ -51,22 +53,12 @@ enum RunnerConnectionPrefs {
         return defaultURL
     }
 
-    static func apiToken(defaults: UserDefaults = .standard) -> String {
-        defaults.string(forKey: AppStorageKey.runnerAPIToken)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-
-    static func remember(url: String, token: String, defaults: UserDefaults = .standard) {
+    static func remember(url: String, defaults: UserDefaults = .standard) {
         let normalized = RunnerURL.normalizeHTTP(url)
         if RunnerURL.isValid(normalized) {
             defaults.set(normalized, forKey: AppStorageKey.lastRunnerURL)
         }
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            defaults.removeObject(forKey: AppStorageKey.runnerAPIToken)
-        } else {
-            defaults.set(trimmed, forKey: AppStorageKey.runnerAPIToken)
-        }
+        defaults.removeObject(forKey: AppStorageKey.runnerAPIToken)
     }
 }
 

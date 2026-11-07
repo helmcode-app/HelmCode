@@ -20,13 +20,19 @@ struct HelmCodeApp: App {
                 .environmentObject(vfsEngine)
                 .environmentObject(agentEngine)
                 .onAppear {
-                    // Restore last Open Project token (URL lives on each saved project).
-                    let token = RunnerConnectionPrefs.apiToken()
-                    if !token.isEmpty {
-                        networkEngine.apiToken = token
-                    }
-                    // Credentials only — VFS/Agent sockets start when a project is opened.
+                    // Drop the legacy shared Bearer. Device tokens live in the Keychain.
+                    UserDefaults.standard.removeObject(forKey: AppStorageKey.runnerAPIToken)
+                    // VFS/Agent sockets start when a project is opened.
                     BackendConnectionSync.syncAll(from: networkEngine, vfs: vfsEngine, agent: agentEngine)
+                }
+                .onOpenURL { url in
+                    guard RunnerPairingLink.parse(url) != nil else { return }
+                    RunnerPairingInbox.pending = url
+                    NotificationCenter.default.post(
+                        name: .helmPairingLink,
+                        object: nil,
+                        userInfo: ["url": url]
+                    )
                 }
         }
         #if os(iOS)

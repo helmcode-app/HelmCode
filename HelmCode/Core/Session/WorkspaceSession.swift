@@ -38,6 +38,12 @@ final class WorkspaceSession: ObservableObject {
     @Published var pendingEditorRevealLine: Int?
     /// When set, the center column shows a read-only git diff instead of the editor.
     @Published var sourceControlDiff: SourceControlDiffRequest?
+    /// Paired runners on this iPad. A runner is not a project until its repo is opened.
+    @Published var enrolledRunners: [EnrolledRunner] {
+        didSet { persistEnrolledRunners() }
+    }
+    /// Set while Open Project enrolls, so the next VFS tree keeps this runner id.
+    var pendingRunnerBinding: (url: String, runnerId: String)?
 
     let defaults: UserDefaults
     let recentLimit = 12
@@ -57,6 +63,7 @@ final class WorkspaceSession: ObservableObject {
         self.selectedFileID = nil
         self.recentProjectIDs = Self.loadRecentIDs(from: defaults, known: resolved)
         self.bookmarks = Self.loadBookmarks(from: defaults)
+        self.enrolledRunners = Self.loadEnrolledRunners(from: defaults, projects: resolved)
         self.sourceControl = nil
         self.sourceControlDiff = nil
         // Welcome first; project list stays cached from disk.
@@ -136,16 +143,60 @@ final class WorkspaceSession: ObservableObject {
         persistProjects()
     }
 
+    /// Remember a just-enrolled runner so tree refresh and URL edits stay on one project.
+    func noteEnrolledRunner(url: String, runnerId: String) {
+        rememberEnrolledRunner(url: url, runnerId: runnerId)
+    }
+
+    /// Pairing succeeded. Keep the machine in the runner list; do not open a project yet.
+    func rememberEnrolledRunner(url: String, runnerId: String, label: String? = nil) {
+        let normalized = RunnerURL.normalizeHTTP(url)
+        pendingRunnerBinding = (normalized, runnerId)
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let record = EnrolledRunner(
+            id: runnerId,
+            url: normalized,
+            label: trimmed.isEmpty ? EnrolledRunner.hostLabel(for: normalized) : trimmed
+        )
+        if let idx = enrolledRunners.firstIndex(where: { $0.id == runnerId || $0.url == normalized }) {
+            enrolledRunners[idx] = record
+        } else {
+            enrolledRunners.append(record)
+        }
+        guard let idx = projects.firstIndex(where: {
+            $0.runnerId == runnerId || $0.normalizedRunnerURL == normalized
+        }) else { return }
+        let current = projects[idx]
+        projects[idx] = current.with(
+            runnerBaseURL: normalized,
+            runnerId: runnerId,
+            apiToken: nil,
+            keepAPIToken: false
+        )
+    }
+
+    /// Drop the local pairing. Does not revoke the server token.
+    func forgetEnrolledRunner(_ id: String) {
+        enrolledRunners.removeAll { $0.id == id }
+        RunnerCredentialStore.delete(runnerId: id)
+        if pendingRunnerBinding?.runnerId == id {
+            pendingRunnerBinding = nil
+        }
+        for projectID in projects.filter({ $0.runnerId == id }).map(\.id) {
+            removeProject(projectID)
+        }
+    }
+
     /**
-     Apply Project Settings: display name, runner URL, API token.
-     Returns the resulting project id (may change when runner URL changes).
+     Apply Project Settings: display name and runner URL.
+     A known runner id keeps the project id when the URL changes.
      */
     @discardableResult
     func updateProjectSettings(
         id: WorkspaceProject.ID,
         customName: String,
         runnerURL: String,
-        apiToken: String
+        runnerId: String? = nil
     ) throws -> WorkspaceProject.ID {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else {
             throw ProjectSettingsError.projectNotFound
@@ -155,14 +206,21 @@ final class WorkspaceSession: ObservableObject {
         }
 
         let normalizedURL = RunnerURL.normalizeHTTP(runnerURL)
-        let newID = WorkspaceProject.stableID(forRunnerBaseURL: normalizedURL)
         let current = projects[idx]
+        let boundRunnerId = runnerId ?? current.runnerId
+        let newID = boundRunnerId == nil
+            ? WorkspaceProject.stableID(
+                forRunnerBaseURL: normalizedURL,
+                workspaceId: current.workspaceId
+            )
+            : id
         let nameOverride = customName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Reject URL collision with a different project.
+        // Reject URL + workspace collision with a different project.
         if let other = projects.first(where: {
-            $0.id != id && $0.normalizedRunnerURL == normalizedURL
+            $0.id != id &&
+            $0.normalizedRunnerURL == normalizedURL &&
+            $0.workspaceId == current.workspaceId
         }) {
             throw ProjectSettingsError.runnerURLInUse(other.displayName)
         }
@@ -175,7 +233,8 @@ final class WorkspaceSession: ObservableObject {
             root: current.root,
             runnerBaseURL: normalizedURL,
             customName: nameOverride.isEmpty ? nil : nameOverride,
-            apiToken: token.isEmpty ? nil : token
+            runnerId: boundRunnerId,
+            workspaceId: current.workspaceId
         )
 
         let wasSelected = selectedProjectID == id
@@ -201,7 +260,12 @@ final class WorkspaceSession: ObservableObject {
             return true
         }
 
-        RunnerConnectionPrefs.remember(url: normalizedURL, token: token)
+        if let boundRunnerId {
+            if let runnerIdx = enrolledRunners.firstIndex(where: { $0.id == boundRunnerId }) {
+                enrolledRunners[runnerIdx].url = normalizedURL
+            }
+        }
+        RunnerConnectionPrefs.remember(url: normalizedURL)
         persistRecent()
         persistProjects()
         return newID

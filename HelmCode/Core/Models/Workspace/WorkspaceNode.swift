@@ -21,7 +21,11 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
     let root: WorkspaceNode
     /// Runner-core HTTP base URL for this project (`nil` = no remote API / not a real workspace).
     let runnerBaseURL: String?
-    /// Optional Bearer for this project's runner (`OPENCORE_API_TOKEN`).
+    /// Stable runner identity. Device token is stored in the Keychain under this id.
+    let runnerId: String?
+    /// Runner workspace id (`default` or a cloned project id). Bound to VFS / terminal / sessions.
+    let workspaceId: String
+    /// Legacy shared Bearer. No longer written; credentials live in the Keychain.
     let apiToken: String?
 
     init(
@@ -32,6 +36,8 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         root: WorkspaceNode,
         runnerBaseURL: String? = nil,
         customName: String? = nil,
+        runnerId: String? = nil,
+        workspaceId: String? = nil,
         apiToken: String? = nil
     ) {
         self.id = id
@@ -41,7 +47,15 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         self.defaultBranch = defaultBranch
         self.root = root
         self.runnerBaseURL = runnerBaseURL
+        self.runnerId = Self.normalizedOptional(runnerId)
+        self.workspaceId = Self.normalizedWorkspaceId(workspaceId)
         self.apiToken = Self.normalizedOptional(apiToken)
+    }
+
+    /// Device token for this runner, if this iPad has enrolled.
+    var deviceToken: String? {
+        guard let runnerId else { return nil }
+        return RunnerCredentialStore.token(runnerId: runnerId)
     }
 
     /// Title for lists / switcher / chrome.
@@ -57,10 +71,20 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Stable id for a self-hosted runner URL (survives restarts; one project per URL).
-    static func stableID(forRunnerBaseURL raw: String) -> String {
+    static func normalizedWorkspaceId(_ raw: String?) -> String {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? HelmWorkspace.defaultID : trimmed
+    }
+
+    /// Stable id for a runner URL + workspace (survives restarts; one project per workspace).
+    static func stableID(
+        forRunnerBaseURL raw: String,
+        workspaceId: String = HelmWorkspace.defaultID
+    ) -> String {
         let normalized = RunnerURL.normalizeHTTP(raw).lowercased()
-        let data = Data(normalized.utf8)
+        let wid = normalizedWorkspaceId(workspaceId)
+        let key = "\(normalized)#\(wid)"
+        let data = Data(key.utf8)
         let encoded = data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
@@ -134,6 +158,10 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
         defaultBranch: String? = nil,
         root: WorkspaceNode? = nil,
         runnerBaseURL: String? = nil,
+        runnerId: String? = nil,
+        keepRunnerId: Bool = true,
+        workspaceId: String? = nil,
+        keepWorkspaceId: Bool = true,
         apiToken: String? = nil,
         keepAPIToken: Bool = true
     ) -> WorkspaceProject {
@@ -145,6 +173,8 @@ struct WorkspaceProject: Identifiable, Hashable, Sendable {
             root: root ?? self.root,
             runnerBaseURL: runnerBaseURL ?? self.runnerBaseURL,
             customName: keepCustomName ? (customName ?? self.customName) : customName,
+            runnerId: keepRunnerId ? (runnerId ?? self.runnerId) : runnerId,
+            workspaceId: keepWorkspaceId ? (workspaceId ?? self.workspaceId) : workspaceId,
             apiToken: keepAPIToken ? (apiToken ?? self.apiToken) : apiToken
         )
     }

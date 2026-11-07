@@ -19,6 +19,12 @@ extension WorkspaceSession {
         defaults.set(data, forKey: AppStorageKey.savedProjects)
     }
 
+    func persistEnrolledRunners() {
+        guard !isRestoring else { return }
+        guard let data = try? JSONEncoder().encode(enrolledRunners) else { return }
+        defaults.set(data, forKey: AppStorageKey.enrolledRunners)
+    }
+
     func persistLastSelectedProjectID() {
         guard !isRestoring else { return }
         if let id = selectedProjectID {
@@ -49,6 +55,24 @@ extension WorkspaceSession {
             if !parsed.isEmpty { return parsed }
         }
         return projects.map(\.id)
+    }
+
+    static func loadEnrolledRunners(
+        from defaults: UserDefaults,
+        projects: [WorkspaceProject]
+    ) -> [EnrolledRunner] {
+        var stored: [EnrolledRunner] = []
+        if let data = defaults.data(forKey: AppStorageKey.enrolledRunners),
+           let decoded = try? JSONDecoder().decode([EnrolledRunner].self, from: data) {
+            stored = decoded.filter { RunnerURL.isValid($0.url) && !$0.id.isEmpty }
+        }
+        for project in projects {
+            guard let runnerId = project.runnerId,
+                  let url = project.normalizedRunnerURL,
+                  !stored.contains(where: { $0.id == runnerId || $0.url == url }) else { continue }
+            stored.append(EnrolledRunner(id: runnerId, url: url, label: EnrolledRunner.hostLabel(for: url)))
+        }
+        return stored
     }
 
     static func loadBookmarks(from defaults: UserDefaults) -> [WorkspaceBookmark] {

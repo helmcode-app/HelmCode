@@ -14,6 +14,7 @@ struct EditorDetailView: View {
     @ObservedObject var vfs: VFSNetworkEngine
     @ObservedObject var agent: AgentNetworkEngine
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     var onOpenSettings: (() -> Void)?
 
     @AppStorage(AppStorageKey.showCommander) private var showCommander = true
@@ -33,7 +34,9 @@ struct EditorDetailView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar(removing: .sidebarToggle)
+            // While the sidebar is open its own trailing toggle is the collapse control.
+            // Collapsed: leave the system expand button on this column's leading edge.
+            .toolbar(removing: columnVisibility == .detailOnly ? nil : .sidebarToggle)
             .toolbar { detailToolbar }
             .background { terminalKeyboardShortcut }
             .onChange(of: session.selectedProjectID) { oldID, newID in
@@ -68,7 +71,7 @@ struct EditorDetailView: View {
                     projectID: project.id,
                     projectRunnerURL: project.normalizedRunnerURL ?? project.runnerBaseURL,
                     isVisible: showingTerminal,
-                    workspaceId: agent.workspaceId,
+                    workspaceId: project.workspaceId,
                     sessionEpoch: terminalSessionEpoch,
                     onSessionEnded: handleShellExit,
                     onHide: hideTerminal

@@ -24,7 +24,12 @@ struct SessionUsage: Codable, Sendable, Equatable {
     }
 
     var contextLabel: String {
-        "\(Self.compactTokens(used)) / \(Self.compactTokens(size))"
+        "\(percentUsed)% / \(Self.compactTokens(size))"
+    }
+
+    /// Used / size, rounded to the nearest whole percent.
+    var percentUsed: Int {
+        Int((fraction * 100).rounded())
     }
 
     var costLabel: String? {

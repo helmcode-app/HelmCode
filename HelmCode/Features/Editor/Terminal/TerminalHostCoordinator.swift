@@ -148,10 +148,29 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
         lastConnectKey = key
         lastReconnectGeneration = gen
         hasLiveSession = false
+        Task { await connectWithTicket(attempt: attemptToken) }
+    }
+
+    private func connectWithTicket(attempt: String) async {
+        let ticket: String
+        do {
+            let client = RunnerCoreAPIClient(
+                baseURLString: parent.baseURLString,
+                apiToken: parent.apiToken
+            )
+            ticket = try await client.createWsTicket().ticket
+        } catch {
+            if lastAttemptToken == attempt {
+                lastAttemptToken = nil
+            }
+            parent.onStatus?(RunnerAuthCopy.message(for: error), .err)
+            return
+        }
+        guard lastAttemptToken == attempt else { return }
         evaluate(
             TerminalBundle.connectJavaScript(
                 baseURL: parent.baseURLString,
-                token: parent.apiToken,
+                ticket: ticket,
                 workspaceId: parent.workspaceId
             )
         )
@@ -259,6 +278,10 @@ final class TerminalHostCoordinator: NSObject, WKNavigationDelegate, WKScriptMes
         switch type {
         case "ready":
             markPageReady()
+
+        case "needTicket":
+            lastAttemptToken = nil
+            syncConnection()
 
         case "status":
             let text = body["text"] as? String ?? ""

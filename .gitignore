@@ -38,6 +38,11 @@ playground.xcworkspace
 # Local checkout of the sibling runner (do not commit the symlink).
 /runner-core
 
+# IDE
+.idea/
+.vscode/
+
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
