@@ -32,14 +32,28 @@ struct AgentCommandPanel: View {
     }
 
     var body: some View {
-        Group {
-            if projectRunnerReady {
-                activeWorkspaceBody
-            } else {
-                unavailableBody
+        NavigationStack {
+            Group {
+                if projectRunnerReady {
+                    activeWorkspaceBody
+                } else {
+                    unavailableBody
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle("")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar(removing: .title)
+            .toolbar {
+                AgentCommandToolbar(
+                    agent: agent,
+                    showActions: projectRunnerReady,
+                    onOpenSessions: { showSessionPicker = true }
+                )
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: session.selectedProjectID) { _, _ in
             seedBranchFromProject()
             agent.clearContextPaths()
@@ -55,31 +69,21 @@ struct AgentCommandPanel: View {
     // MARK: - Layouts
 
     private var unavailableBody: some View {
-        VStack(spacing: 0) {
-            AgentCommandHeader(agent: agent, showActions: false, onOpenSessions: {})
-            Divider().opacity(0.5)
-            FeatureEmptyPlaceholder(
-                systemImage: "bubble.left.and.bubble.right",
-                title: Copy.unavailableTitle,
-                subtitle: Copy.unavailableSubtitle
-            )
-        }
+        FeatureEmptyPlaceholder(
+            systemImage: "bubble.left.and.bubble.right",
+            title: Copy.unavailableTitle,
+            subtitle: Copy.unavailableSubtitle
+        )
     }
 
     private var activeWorkspaceBody: some View {
-        VStack(spacing: 0) {
-            AgentCommandHeader(agent: agent, showActions: true) {
-                showSessionPicker = true
+        AgentTimelineView(agent: agent)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                composerDock
             }
-            Divider().opacity(0.35)
-            AgentTimelineView(agent: agent)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            composerDock
-        }
-        .onAppear {
-            seedBranchFromProject()
-        }
+            .onAppear {
+                seedBranchFromProject()
+            }
     }
 
     private var composerDock: some View {

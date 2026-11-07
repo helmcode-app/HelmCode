@@ -2,27 +2,42 @@
 //  AgentCommandHeader.swift
 //  HelmCode
 //
-//  Cursor-like agent chat header: session title, phase chip, new/stop.
+//  System navigation bar toolbar items for the Agent inspector column.
 //
 
 import SwiftUI
 
-struct AgentCommandHeader: View {
+struct AgentCommandToolbar: ToolbarContent {
     @ObservedObject var agent: AgentNetworkEngine
     var showActions: Bool
     var onOpenSessions: () -> Void
 
-    var body: some View {
-        HStack(spacing: 8) {
-            if showActions {
+    var body: some ToolbarContent {
+        if showActions {
+            ToolbarItem(placement: .topBarLeading) {
                 sessionButton
-                Spacer(minLength: 4)
-                phaseChip
-                trailingAction
-            } else {
+            }
+            .sharedBackgroundVisibility(.hidden)
+
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 10) {
+                    phaseChip
+                    trailingAction
+                }
+            }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
                 Text("Agent")
                     .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 0)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
+            }
+            .sharedBackgroundVisibility(.hidden)
+
+            ToolbarItem(placement: .topBarTrailing) {
                 Text("UNAVAILABLE")
                     .font(.caption2.weight(.bold))
                     .tracking(0.5)
@@ -30,11 +45,10 @@ struct AgentCommandHeader: View {
                     .padding(.vertical, 3)
                     .background(Color.secondary.opacity(0.14), in: Capsule())
                     .foregroundStyle(.secondary)
+                    .fixedSize()
             }
+            .sharedBackgroundVisibility(.hidden)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground).opacity(0.55))
     }
 
     // MARK: - Pieces

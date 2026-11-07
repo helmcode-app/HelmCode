@@ -87,19 +87,19 @@ struct SidebarSettingsBar: View {
 
     var body: some View {
         Button(action: action) {
-            Label {
-                Text("Settings")
-                    .font(.body)
-                    .foregroundStyle(.primary)
-            } icon: {
+            HStack(spacing: 12) {
                 Image(systemName: "gearshape")
                     .font(.body)
                     .foregroundStyle(.primary)
                     .symbolRenderingMode(.monochrome)
+                Text("Settings")
+                    .font(.body)
+                    .foregroundStyle(.primary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
+            .padding(.leading, 22)
+            .padding(.trailing, 16)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
