@@ -22,11 +22,8 @@ extension AgentNetworkEngine {
         guard !phase.isBusy else {
             throw AgentEngineError.alreadyRunning
         }
-        if !socketState.isReady {
-            if !wantsRunning { start() }
-            try await waitUntilConnected(timeout: 12)
-        }
 
+        // Mark busy before any await so Stop is meaningful during connect/session setup.
         phase = .launching
         lastError = nil
         result = nil
@@ -36,12 +33,20 @@ extension AgentNetworkEngine {
         stopPolling()
 
         do {
+            if !socketState.isReady {
+                if !wantsRunning { start() }
+                try await waitUntilConnected(timeout: 12)
+                try throwIfLaunchCancelled()
+            }
+
             let sid = try await ensureSession()
+            try throwIfLaunchCancelled()
             activeTaskID = sid
 
             // Snapshot server history *before* this turn so we do not treat the
             // previous assistant reply as completion for the new prompt.
             let prior = try await api.sessionHistory(id: sid, limit: 200)
+            try throwIfLaunchCancelled()
             timelineIDsBeforeTurn = Set(
                 prior.entries
                     .map(\.id)
@@ -72,8 +77,10 @@ extension AgentNetworkEngine {
                 fast: fastMode
             )
             let acceptedRemote = try await api.promptSession(id: sid, body: body)
+            try throwIfLaunchCancelled()
             activeTaskID = acceptedRemote.sessionId
             await bindTitleAfterPrompt(trimmed, prior: prior)
+            try throwIfLaunchCancelled()
             phase = .processing
             pollStatus = .running
             prompt = ""
@@ -81,7 +88,18 @@ extension AgentNetworkEngine {
             log.info(
                 "session prompt accepted sessionId=\(acceptedRemote.sessionId, privacy: .public) mode=\(acceptedRemote.mode ?? "-", privacy: .public) baselineMsgs=\(self.timelineIDsBeforeTurn.count, privacy: .public)"
             )
+        } catch is CancellationError {
+            stopPolling()
+            if phase != .cancelled {
+                phase = .cancelled
+                pollStatus = .cancelled
+            }
         } catch {
+            // Stop during launch sets `.cancelled` — don't overwrite with `.failed`.
+            if phase == .cancelled {
+                stopPolling()
+                return
+            }
             let message = mapError(error)
             phase = .failed(message)
             lastError = message
@@ -91,6 +109,13 @@ extension AgentNetworkEngine {
     }
 
     func cancelActiveTask() async {
+        // Abort in-flight launch even before session/task IDs exist.
+        if sessionID == nil, activeTaskID == nil {
+            phase = .cancelled
+            pollStatus = .cancelled
+            stopPolling()
+            return
+        }
         guard let sessionId = sessionID ?? activeTaskID else { return }
         do {
             let _: SessionCancelResponse = try await api.cancelSession(id: sessionId)
@@ -105,6 +130,13 @@ extension AgentNetworkEngine {
             stopPolling()
         } catch {
             lastError = mapError(error)
+        }
+    }
+
+    /// Cooperative cancel for `launchHeadlessAgent` awaits.
+    private func throwIfLaunchCancelled() throws {
+        if phase == .cancelled || Task.isCancelled {
+            throw CancellationError()
         }
     }
 }

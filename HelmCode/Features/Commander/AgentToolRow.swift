@@ -17,6 +17,8 @@ struct AgentToolRow: View {
     let action: AgentToolAction
     var isExpanded: Bool
     var onToggle: () -> Void
+    /// Open the tool's file path in the editor when available.
+    var onOpenPath: ((String) -> Void)? = nil
 
     private let maxPreviewLines = 24
 
@@ -26,7 +28,12 @@ struct AgentToolRow: View {
             header
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    guard action.hasExpandableBody else { return }
+                    guard action.hasExpandableBody else {
+                        if let path = action.path, !path.isEmpty {
+                            onOpenPath?(path)
+                        }
+                        return
+                    }
                     onToggle()
                 }
                 .accessibilityAddTraits(action.hasExpandableBody ? .isButton : [])
@@ -68,11 +75,25 @@ struct AgentToolRow: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
-            Text(action.detail)
-                .font(.subheadline.monospaced())
-                .foregroundStyle(Color.accentColor)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+            if let path = action.path, !path.isEmpty, onOpenPath != nil {
+                Button {
+                    onOpenPath?(path)
+                } label: {
+                    Text(action.detail)
+                        .font(.subheadline.monospaced())
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(path)")
+            } else {
+                Text(action.detail)
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
 
             Spacer(minLength: 4)
 

@@ -2,7 +2,7 @@
 //  AgentUserBubble.swift
 //  HelmCode
 //
-//  User chat bubble: content on top; time + Rewind on the bottom row.
+//  Full-width industrial prompt card with a leading accent rail + rewind control.
 //
 
 import SwiftUI
@@ -28,70 +28,35 @@ struct AgentUserBubble: View {
         messageId != nil && onConfirmRewind != nil
     }
 
-    private var timeText: String {
-        let d = entry.timestamp
-        guard d != .distantPast else { return "" }
-        return d.formatted(date: .omitted, time: .shortened)
-    }
-
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Spacer(minLength: 48)
+        HStack(alignment: .top, spacing: 0) {
+            AgentAccentRail()
+                .padding(.vertical, 2)
 
-            VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
                 Text(entry.message)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 10)
 
-                HStack(spacing: 8) {
-                    if !timeText.isEmpty {
-                        Text(timeText)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer(minLength: 0)
-                    if canShowRewind {
-                        Button {
-                            showRestoreConfirm = true
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(minWidth: 24, minHeight: 24)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Rewind to this message")
-                        .help("Rewind: drop this message and after, restore files, put the text back in the composer")
-                    }
+                if canShowRewind {
+                    rewindButton
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.trailing, 10)
             .padding(.vertical, 10)
-            .background(
-                Color.accentColor.opacity(0.16),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .confirmationDialog(
-                "Rewind to this message?",
-                isPresented: $showRestoreConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Rewind chat and files", role: .destructive) {
-                    if let mid = messageId {
-                        onConfirmRewind?(mid)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Removes this message and everything after, restores the workspace to that checkpoint, and puts the text back in the input. This cannot be undone.")
-            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AgentChrome.promptFill,
+            in: RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous))
+        .padding(.horizontal, AgentChrome.timelineGutter)
+        .padding(.vertical, 5)
         .contextMenu {
             if canShowRewind {
                 Button(role: .destructive) {
@@ -108,5 +73,57 @@ struct AgentUserBubble: View {
                 Label("Copy", systemImage: "doc.on.doc")
             }
         }
+    }
+
+    private var rewindButton: some View {
+        Button {
+            showRestoreConfirm = true
+        } label: {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Rewind to this message")
+        .help("Rewind: drop this message and after, restore files, put the text back in the composer")
+        // Anchor the confirm sheet to this control so it follows the message, not screen center.
+        .popover(isPresented: $showRestoreConfirm, arrowEdge: .top) {
+            rewindConfirmPopover
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var rewindConfirmPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rewind to this message?")
+                .font(.subheadline.weight(.semibold))
+            Text("Removes this message and everything after, restores the workspace to that checkpoint, and puts the text back in the input. This cannot be undone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Button("Cancel", role: .cancel) {
+                    showRestoreConfirm = false
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Rewind", role: .destructive) {
+                    showRestoreConfirm = false
+                    if let mid = messageId {
+                        onConfirmRewind?(mid)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .controlSize(.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(14)
+        .frame(width: 280)
     }
 }

@@ -2,7 +2,7 @@
 //  AgentCommandComposer.swift
 //  HelmCode
 //
-//  Floating glass composer: branch · usage · prompt · mode/model · send.
+//  Floating glass composer: context · branch · usage · prompt · mode/model · send/stop.
 //  `/` and `@` picker: AgentComposerTriggerDock.
 //
 
@@ -19,14 +19,17 @@ struct AgentCommandComposer: View {
     var canLaunch: Bool
     var onSend: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
     @State private var modelPickerOpen = false
 
     private var composerDisabled: Bool {
         agent.phase.isBusy || !agent.socketState.isReady
     }
 
-    /// Inset from the glass rim to the four corner controls (branch, usage, mode, send).
-    private static let chromeInset: CGFloat = 14
+    private var isRunning: Bool {
+        isLaunching || agent.phase.isBusy
+    }
 
     var body: some View {
         AgentComposerTriggerDock(
@@ -38,7 +41,9 @@ struct AgentCommandComposer: View {
         ) { menuKeys in
             VStack(alignment: .leading, spacing: 0) {
                 topBar
-                    .padding(.bottom, 2)
+
+                composerRule
+                    .padding(.vertical, 8)
 
                 AgentComposerPromptEditor(
                     text: $agent.prompt,
@@ -52,31 +57,149 @@ struct AgentCommandComposer: View {
                     menuKeys: menuKeys
                 )
 
+                composerRule
+                    .padding(.vertical, 8)
+
                 bottomBar
-                    .padding(.top, 2)
             }
-            .padding(Self.chromeInset)
-            .helmSystemGlassPanel(cornerRadius: 26, interactive: true)
+            .padding(AgentChrome.composerInset)
+            .helmSystemGlassPanel(cornerRadius: AgentChrome.composerRadius, interactive: true)
         }
         .sheet(isPresented: $modelPickerOpen) {
             AgentModelPickerSheet(agent: agent, isPresented: $modelPickerOpen)
         }
     }
 
-    // MARK: - Top (branch · usage)
+    private var composerRule: some View {
+        Rectangle()
+            .fill(AgentChrome.hairline(colorScheme))
+            .frame(height: 1 / max(displayScale, 1))
+            .accessibilityHidden(true)
+    }
+
+    // MARK: - Top (context · branch · usage)
 
     private var topBar: some View {
-        HStack(spacing: 6) {
-            branchLabel
-                .frame(maxWidth: .infinity, alignment: .leading)
-            AgentComposerUsageMeter(usage: agent.sessionUsage)
-                .layoutPriority(1)
+        VStack(alignment: .leading, spacing: 8) {
+            if !contextChips.isEmpty {
+                contextPillsRow
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            HStack(spacing: 6) {
+                branchLabel
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                AgentComposerUsageMeter(usage: agent.sessionUsage)
+                    .layoutPriority(1)
+            }
+        }
+        .animation(AgentChrome.chipSpring, value: contextChips.map(\.id))
+    }
+
+    private var contextChips: [ContextChip] {
+        var chips: [ContextChip] = agent.contextPaths.map {
+            ContextChip(id: $0, path: $0, kind: .pinned)
+        }
+        if let selected = session.selectedFile, !selected.isDirectory {
+            let path = VFSPath.normalize(selected.path)
+            if !path.isEmpty,
+               !chips.contains(where: { VFSPath.matches($0.path, path) }) {
+                chips.insert(ContextChip(id: "active:\(path)", path: path, kind: .activeFile), at: 0)
+            }
+        }
+        return chips
+    }
+
+    private var contextPillsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(contextChips) { chip in
+                    contextPill(chip)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Context files")
+    }
+
+    @ViewBuilder
+    private func contextPill(_ chip: ContextChip) -> some View {
+        switch chip.kind {
+        case .pinned:
+            HStack(spacing: 5) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 9, weight: .bold))
+                Text(AgentChatFormatting.shortDisplayPath(chip.path))
+                    .font(.caption2.weight(.semibold).monospaced())
+                    .lineLimit(1)
+                Button {
+                    withAnimation(AgentChrome.chipSpring) {
+                        removeContext(chip.path)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(chip.path)")
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 4)
+            .frame(height: 24)
+            .background(
+                Color.accentColor.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: AgentChrome.chipRadius, style: .continuous)
+            )
+            .foregroundStyle(Color.accentColor)
+
+        case .activeFile:
+            Button {
+                withAnimation(AgentChrome.chipSpring) {
+                    agent.addContextPath(chip.path)
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                    Text(AgentChatFormatting.shortDisplayPath(chip.path))
+                        .font(.caption2.weight(.semibold).monospaced())
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(
+                    Color(.tertiarySystemFill),
+                    in: RoundedRectangle(cornerRadius: AgentChrome.chipRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AgentChrome.chipRadius, style: .continuous)
+                        .strokeBorder(AgentChrome.hairline(colorScheme), lineWidth: 1)
+                )
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add \(chip.path) to context")
+            .disabled(composerDisabled)
+        }
+    }
+
+    private func removeContext(_ path: String) {
+        agent.removeContextPath(path)
+        let tag = AgentPromptTagging.fileTag(for: path)
+        if agent.prompt.contains(tag) {
+            agent.prompt = agent.prompt
+                .replacingOccurrences(of: tag + " ", with: "")
+                .replacingOccurrences(of: tag, with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
     private var branchLabel: some View {
         Label(currentBranchTitle, systemImage: "arrow.triangle.branch")
-            .font(.caption.weight(.semibold))
+            .font(.caption.weight(.semibold).monospaced())
             .foregroundStyle(.secondary)
             .labelStyle(.titleAndIcon)
             .lineLimit(1)
@@ -92,14 +215,14 @@ struct AgentCommandComposer: View {
         )
     }
 
-    // MARK: - Bottom (mode · model · send)
+    // MARK: - Bottom (mode · model · send/stop)
 
     private var bottomBar: some View {
         HStack(spacing: 4) {
             modeMenu
             modelChip
             Spacer(minLength: 4)
-            sendButton
+            sendOrStopButton
         }
     }
 
@@ -137,24 +260,27 @@ struct AgentCommandComposer: View {
         )
     }
 
-    private var sendButton: some View {
-        Button(action: onSend) {
-            if isLaunching || agent.phase.isProcessingLayout {
-                ProgressView()
-                    .controlSize(.small)
+    private var sendOrStopButton: some View {
+        Button {
+            if isRunning {
+                Task { await agent.cancelActiveTask() }
             } else {
-                Image(systemName: "arrow.up")
-                    .font(.body.weight(.bold))
+                onSend()
             }
+        } label: {
+            Image(systemName: isRunning ? "stop.fill" : "arrow.up")
+                .font(.body.weight(.bold))
+                .contentTransition(.symbolEffect(.replace))
         }
-        .frame(width: 34, height: 34)
+        .frame(width: AgentChrome.sendStopSize, height: AgentChrome.sendStopSize)
         .buttonStyle(.glassProminent)
-        .disabled(!canLaunch)
-        // Primary path is Return in the editor; keep ⌘↩ as a backup when focus is elsewhere.
+        .tint(isRunning ? .red : Color.accentColor)
+        .disabled(!isRunning && !canLaunch)
         .keyboardShortcut(.return, modifiers: [.command])
-        .accessibilityLabel("Send")
-        .help("Return to send · Option+Return for newline")
-        .animation(.easeInOut(duration: 0.15), value: canLaunch)
+        .accessibilityLabel(isRunning ? "Stop" : "Send")
+        .help(isRunning ? "Stop the current agent turn" : "Return to send · Option+Return for newline")
+        .animation(AgentChrome.sendMorph, value: isRunning)
+        .animation(AgentChrome.sendMorph, value: canLaunch)
     }
 
     // MARK: - Newline
@@ -168,4 +294,17 @@ struct AgentCommandComposer: View {
         agent.prompt = edited.text
         promptSelection = edited.selection
     }
+}
+
+// MARK: - Context chip model
+
+private struct ContextChip: Identifiable {
+    enum Kind {
+        case pinned
+        case activeFile
+    }
+
+    let id: String
+    let path: String
+    let kind: Kind
 }

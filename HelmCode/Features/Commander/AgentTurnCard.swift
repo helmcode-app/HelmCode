@@ -15,6 +15,7 @@ struct AgentTurnCard: View {
     let parts: [EventLog]
     /// Show green Done on the Worked-for row (only the latest completed turn).
     var showDone: Bool = false
+    var onOpenPath: ((String) -> Void)? = nil
 
     @State private var thoughtExpanded = false
     @State private var expandedToolIDs: Set<String> = []
@@ -112,7 +113,8 @@ struct AgentTurnCard: View {
                         } else {
                             expandedToolIDs.insert(action.id)
                         }
-                    }
+                    },
+                    onOpenPath: onOpenPath
                 )
             }
         }
@@ -128,11 +130,7 @@ struct AgentTurnCard: View {
     @ViewBuilder
     private var answerSection: some View {
         if !content.answer.isEmpty {
-            Text(content.answer)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            AgentMarkdownView(source: content.answer)
         } else if isRunning, content.thought.isEmpty, content.tools.isEmpty {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.mini)
@@ -143,16 +141,17 @@ struct AgentTurnCard: View {
         } else if content.answer.isEmpty, !isRunning, content.thought.isEmpty, content.tools.isEmpty {
             let fallback = parts.last?.message ?? ""
             if !fallback.isEmpty, !AgentChatFormatting.looksLikeRawToolNoise(fallback) {
-                Text(fallback)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
+                AgentMarkdownView(source: fallback)
             }
         }
     }
 
     private var footerRow: some View {
         HStack(spacing: 8) {
+            if isRunning {
+                ProgressView()
+                    .controlSize(.mini)
+            }
             Text(workedLabel)
                 .font(.caption.weight(.medium).monospacedDigit())
                 .foregroundStyle(.tertiary)
@@ -160,18 +159,22 @@ struct AgentTurnCard: View {
             Spacer(minLength: 8)
             if showDone, !isRunning {
                 HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
+                    Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(.green)
-                    Text("Done")
-                        .font(.caption.weight(.semibold))
+                    Text("DONE")
+                        .font(.caption2.weight(.bold).monospaced())
+                        .tracking(0.8)
                         .foregroundStyle(.secondary)
                 }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.green.opacity(0.12), in: Capsule())
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Done")
             }
         }
-        .padding(.top, 2)
+        .padding(.top, 4)
     }
 
     @ViewBuilder

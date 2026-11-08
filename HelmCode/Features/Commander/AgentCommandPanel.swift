@@ -77,7 +77,7 @@ struct AgentCommandPanel: View {
     }
 
     private var activeWorkspaceBody: some View {
-        AgentTimelineView(agent: agent)
+        AgentTimelineView(agent: agent, onOpenPath: openPathInEditor)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 composerDock
             }
@@ -86,21 +86,24 @@ struct AgentCommandPanel: View {
             }
     }
 
+    private func openPathInEditor(_ path: String) {
+        guard let project = session.selectedProject,
+              let node = project.root.find(path: path),
+              !node.isDirectory
+        else { return }
+        session.openFile(node.id)
+    }
+
     private var composerDock: some View {
-        VStack(spacing: 8) {
-            if agent.phase.isProcessingLayout {
-                AgentProcessingBanner(agent: agent)
-            }
-            AgentCommandComposer(
-                agent: agent,
-                session: session,
-                promptFocused: $promptFocused,
-                promptSelection: $promptSelection,
-                isLaunching: $isLaunching,
-                canLaunch: canLaunch,
-                onSend: { Task { await launch() } }
-            )
-        }
+        AgentCommandComposer(
+            agent: agent,
+            session: session,
+            promptFocused: $promptFocused,
+            promptSelection: $promptSelection,
+            isLaunching: $isLaunching,
+            canLaunch: canLaunch,
+            onSend: { Task { await launch() } }
+        )
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10)
@@ -117,6 +120,7 @@ struct AgentCommandPanel: View {
         }
         do {
             _ = try await agent.launchHeadlessAgent()
+            guard agent.phase != .cancelled else { return }
             promptSelection = nil
             promptFocused = false
             await agent.refreshSessionList()

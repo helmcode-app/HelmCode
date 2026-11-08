@@ -8,7 +8,7 @@
 //    CommanderView.swift                 — inspector wrapper
 //    AgentCommandPanel.swift             — header + timeline + composer dock
 //    AgentCommandHeader.swift            — session title / picker
-//    AgentCommandComposer.swift          — glass chrome (branch · usage · send)
+//    AgentCommandComposer.swift          — glass chrome (context · send/stop)
 //    AgentComposerUsageMeter.swift       — context window / cost
 //    AgentComposerTriggerDock.swift      — `/` skills · `@` files host
 //    AgentComposerTrigger.swift          — caret token detect
@@ -20,11 +20,12 @@
 //    AgentModelPickerSheet.swift         — model · think · fast
 //    AgentPromptEditing.swift            — caret insert / replace
 //    AgentPromptTagging.swift            — `@path` → contextPaths
-//    AgentTimelineView.swift             — EventLog scroll
+//    AgentTimelineView.swift             — EventLog scroll + starter chips
 //    AgentTranscriptItem.swift           — group EventLog → turns
 //    AgentTurnContent.swift              — thought / tools / answer
-//    AgentTurnCard.swift / AgentUserBubble / AgentToolRow
-//    AgentProcessingBanner.swift         — working strip
+//    AgentTurnCard / AgentUserBubble / AgentToolRow / AgentMarkdownView
+//    AgentChrome.swift                   — industrial IDE tokens + accent rail
+//    AgentProcessingBanner.swift         — optional slim status caption
 //    AgentChatFormatting.swift           — duration / path helpers
 //    AgentSessionPicker.swift            — chat list sheet
 //

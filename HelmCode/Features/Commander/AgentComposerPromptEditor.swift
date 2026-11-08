@@ -32,9 +32,9 @@ struct AgentComposerPromptEditor: View {
             TextEditor(text: $text, selection: selection)
                 .font(.body)
                 .scrollContentBackground(.hidden)
-                .frame(minHeight: 64, maxHeight: 120)
+                .frame(minHeight: 44, maxHeight: 140)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.vertical, 4)
                 .focused(promptFocused)
                 .disabled(isDisabled)
                 // Hardware keyboard: Return → send · Option+Return → newline (Cursor-style).
@@ -83,7 +83,7 @@ struct AgentComposerPromptEditor: View {
                     .font(.body)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 13)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 10)
                     .allowsHitTesting(false)
             }
         }
