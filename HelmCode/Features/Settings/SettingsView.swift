@@ -80,6 +80,14 @@ struct SettingsView: View {
             if let version = AppBundleInfo.shortVersion {
                 LabeledContent("Version", value: version)
             }
+
+            Link(destination: AppBundleInfo.termsOfServiceURL) {
+                Label("Terms of Service", systemImage: "doc.text")
+            }
+
+            Link(destination: AppBundleInfo.privacyPolicyURL) {
+                Label("Privacy Policy", systemImage: "hand.raised")
+            }
         } header: {
             Text("About")
         }

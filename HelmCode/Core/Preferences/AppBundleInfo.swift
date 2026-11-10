@@ -10,6 +10,11 @@ import Foundation
 enum AppBundleInfo {
     static let displayName = "HelmCode"
 
+    /// Official site (landing page, Terms, Privacy).
+    static let websiteURL = URL(string: "https://www.helmcode.app")!
+    static let termsOfServiceURL = URL(string: "https://www.helmcode.app/terms/")!
+    static let privacyPolicyURL = URL(string: "https://www.helmcode.app/privacy/")!
+
     static var bundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? "—"
     }
