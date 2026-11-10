@@ -14,8 +14,8 @@ struct OpenProjectSelfHostedForm: View {
     var isConnecting: Bool
     var statusText: String?
     var onConfirm: () -> Void
-    var onPairingLink: (URL) -> Void = { _ in }
-    @State private var showScanner = false
+    /// Present the QR scanner from the parent sheet (avoid nested `.sheet` on iPad).
+    var onScanQR: () -> Void = {}
 
     private var canConfirm: Bool {
         RunnerURL.isValid(runnerURL)
@@ -55,9 +55,7 @@ struct OpenProjectSelfHostedForm: View {
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
                                 .uppercased()
                         }
-                    Button {
-                        showScanner = true
-                    } label: {
+                    Button(action: onScanQR) {
                         Image(systemName: "qrcode.viewfinder")
                     }
                     .disabled(isConnecting)
@@ -67,12 +65,6 @@ struct OpenProjectSelfHostedForm: View {
                 Text("Setup code")
             } footer: {
                 Text(Copy.pairFooter)
-            }
-            .sheet(isPresented: $showScanner) {
-                PairingQRScannerSheet(
-                    onCode: { pairingCode = $0 },
-                    onLink: onPairingLink
-                )
             }
 
             if let statusText {

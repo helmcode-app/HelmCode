@@ -150,6 +150,9 @@ struct EditorWelcomeView: View {
         }
     }
 
+    /// Keeps Add Runner / Settings tiles the same height when subtitles wrap.
+    private static let commandTileHeight: CGFloat = 140
+
     private func commandTile(
         title: String,
         subtitle: String,
@@ -177,10 +180,17 @@ struct EditorWelcomeView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 0)
             }
             .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: Self.commandTileHeight,
+                maxHeight: Self.commandTileHeight,
+                alignment: .topLeading
+            )
             .background(
                 Color(.secondarySystemBackground),
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)

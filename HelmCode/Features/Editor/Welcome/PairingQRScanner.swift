@@ -56,34 +56,25 @@ private struct DataScannerRepresentable: UIViewControllerRepresentable {
         Coordinator(onCode: onCode, onLink: onLink)
     }
 
-    func makeUIViewController(context: Context) -> DataScannerViewController {
-        let scanner = DataScannerViewController(
-            recognizedDataTypes: [.barcode(symbologies: [.qr])],
-            qualityLevel: .fast,
-            recognizesMultipleItems: false,
-            isHighFrameRateTrackingEnabled: false,
-            isHighlightingEnabled: true
-        )
-        scanner.delegate = context.coordinator
-        context.coordinator.scanner = scanner
-        return scanner
+    func makeUIViewController(context: Context) -> DataScannerHostController {
+        let host = DataScannerHostController()
+        host.scanner.delegate = context.coordinator
+        context.coordinator.scanner = host.scanner
+        return host
     }
 
-    func updateUIViewController(_ uiViewController: DataScannerViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: DataScannerHostController, context: Context) {
         context.coordinator.onCode = onCode
         context.coordinator.onLink = onLink
-        if !uiViewController.isScanning {
-            try? uiViewController.startScanning()
-        }
+        uiViewController.scanner.delegate = context.coordinator
+        context.coordinator.scanner = uiViewController.scanner
     }
 
     static func dismantleUIViewController(
-        _ uiViewController: DataScannerViewController,
+        _ uiViewController: DataScannerHostController,
         coordinator: Coordinator
     ) {
-        if uiViewController.isScanning {
-            uiViewController.stopScanning()
-        }
+        uiViewController.stopIfNeeded()
     }
 
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
@@ -116,5 +107,64 @@ private struct DataScannerRepresentable: UIViewControllerRepresentable {
                 }
             }
         }
+    }
+}
+
+/// Starts scanning only after the camera view is in the window hierarchy.
+/// Calling `startScanning()` from `updateUIViewController` is racy and can
+/// tear down a nested presentation on iPad.
+private final class DataScannerHostController: UIViewController {
+    let scanner: DataScannerViewController = {
+        DataScannerViewController(
+            recognizedDataTypes: [.barcode(symbologies: [.qr])],
+            qualityLevel: .fast,
+            recognizesMultipleItems: false,
+            isHighFrameRateTrackingEnabled: false,
+            isHighlightingEnabled: true
+        )
+    }()
+
+    private var didStart = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        addChild(scanner)
+        scanner.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(scanner.view)
+        NSLayoutConstraint.activate([
+            scanner.view.topAnchor.constraint(equalTo: view.topAnchor),
+            scanner.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scanner.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scanner.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        scanner.didMove(toParent: self)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        startIfNeeded()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        stopIfNeeded()
+    }
+
+    func startIfNeeded() {
+        guard !didStart, !scanner.isScanning else { return }
+        guard view.window != nil else { return }
+        do {
+            try scanner.startScanning()
+            didStart = true
+        } catch {
+            didStart = false
+        }
+    }
+
+    func stopIfNeeded() {
+        if scanner.isScanning {
+            scanner.stopScanning()
+        }
+        didStart = false
     }
 }

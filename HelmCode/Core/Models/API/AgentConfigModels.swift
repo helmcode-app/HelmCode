@@ -40,6 +40,10 @@ enum AgentHarnessID: String, Codable, Sendable, CaseIterable, Identifiable {
 
     var needsProvider: Bool { self == .opencode }
 
+    /// Asset catalog name under `HarnessIcons/` (official brand marks).
+    var iconAssetName: String { "HarnessIcons/\(rawValue)" }
+
+    /// SF Symbol fallback if the brand asset is missing.
     var systemImage: String {
         switch self {
         case .opencode: return "shippingbox"
@@ -52,17 +56,35 @@ enum AgentHarnessID: String, Codable, Sendable, CaseIterable, Identifiable {
 }
 
 enum AgentProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
+    /// OpenCode Go credential slot. Free `opencode/*` models work once connected.
     case opencodeGo = "opencode-go"
+    /// Legacy aliases — decoded then normalized to `.opencodeGo` in settings.
+    case opencode = "opencode"
     case opencodeGoPlus = "opencode-go-plus"
+    case opencodeZen = "opencode-zen"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .opencodeGo: return "Go"
-        case .opencodeGoPlus: return "Go Plus"
+        case .opencodeGo, .opencode, .opencodeGoPlus, .opencodeZen: return "OpenCode"
         }
     }
+
+    /// Plan label shown after the product name (same auth for Go and Go Plus).
+    var displayPlan: String {
+        switch self {
+        case .opencodeGo, .opencode, .opencodeGoPlus, .opencodeZen: return "Go / Go Plus"
+        }
+    }
+
+    /// Only one real provider for the OpenCode harness.
+    static var selectableCases: [AgentProviderID] { [.opencodeGo] }
+
+    var settingsSelection: AgentProviderID { .opencodeGo }
+
+    /// Go API key required; free `opencode/*` models work once connected.
+    var requiresApiKey: Bool { true }
 }
 
 enum AgentRuntimePhase: String, Codable, Sendable, CaseIterable, Identifiable {
@@ -138,3 +160,4 @@ struct AgentConfigUpdateBody: Encodable, Sendable {
         try c.encodeIfPresent(defaultModel, forKey: .defaultModel)
     }
 }
+

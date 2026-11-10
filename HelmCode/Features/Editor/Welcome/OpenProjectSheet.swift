@@ -2,29 +2,15 @@
 //  OpenProjectSheet.swift
 //  HelmCode
 //
-//  Add Runner: Hosted (reserved) | Self-hosted (URL + setup code).
+//  Add Runner: self-hosted URL + setup code.
 //  Pairing does not open a project. The runner page authorizes the repository.
-//  Form pieces: OpenProjectSelfHostedForm, OpenProjectHostedPlaceholder.
+//  Hosted deployment UI is reserved (`OpenProjectHostedPlaceholder`) for later.
 //
 
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
-
-private enum OpenProjectDeploymentTab: String, CaseIterable, Identifiable {
-    case hosted
-    case selfHosted
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .hosted: return "Hosted"
-        case .selfHosted: return "Self-hosted"
-        }
-    }
-}
 
 struct OpenProjectSheet: View {
     @ObservedObject var session: WorkspaceSession
@@ -33,7 +19,6 @@ struct OpenProjectSheet: View {
     @ObservedObject var agent: AgentNetworkEngine
     @Binding var isPresented: Bool
 
-    @State private var tab: OpenProjectDeploymentTab = .selfHosted
     @State private var runnerURL: String = ""
     @State private var deviceName: String = ""
     @State private var pairingCode: String = ""
@@ -41,14 +26,21 @@ struct OpenProjectSheet: View {
     @State private var statusText: String?
     @State private var errorMessage: String?
     @State private var pairedRunner: EnrolledRunner?
+    /// Presented as fullScreenCover — nested `.sheet` inside Add Runner dismisses immediately on iPad.
+    @State private var showPairingScanner = false
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                deploymentPicker
-                tabContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
+            OpenProjectSelfHostedForm(
+                runnerURL: $runnerURL,
+                deviceName: $deviceName,
+                pairingCode: $pairingCode,
+                isConnecting: isConnecting,
+                statusText: statusText,
+                onConfirm: { Task { await connectSelfHosted() } },
+                onScanQR: { showPairingScanner = true }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color(.systemGroupedBackground))
             .helmInlineNavigationTitle("Add Runner")
             .navigationDestination(item: $pairedRunner) { runner in
@@ -60,6 +52,18 @@ struct OpenProjectSheet: View {
                     agent: agent,
                     onClose: { isPresented = false },
                     onOpened: { isPresented = false }
+                )
+            }
+            .fullScreenCover(isPresented: $showPairingScanner) {
+                PairingQRScannerSheet(
+                    onCode: { pairingCode = $0 },
+                    onLink: { url in
+                        showPairingScanner = false
+                        guard let parsed = RunnerPairingLink.parse(url) else { return }
+                        runnerURL = parsed.runnerURL
+                        pairingCode = parsed.code
+                        Task { await connectSelfHosted() }
+                    }
                 )
             }
             .helmSheetCloseToolbar(disabled: isConnecting) {
@@ -102,43 +106,6 @@ struct OpenProjectSheet: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-        }
-    }
-
-    // MARK: - Chrome
-
-    private var deploymentPicker: some View {
-        Picker("Deployment", selection: $tab) {
-            ForEach(OpenProjectDeploymentTab.allCases) { item in
-                Text(item.title).tag(item)
-            }
-        }
-        .helmLargeSegmentedStyle()
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
-    }
-
-    @ViewBuilder
-    private var tabContent: some View {
-        switch tab {
-        case .hosted:
-            OpenProjectHostedPlaceholder()
-        case .selfHosted:
-            OpenProjectSelfHostedForm(
-                runnerURL: $runnerURL,
-                deviceName: $deviceName,
-                pairingCode: $pairingCode,
-                isConnecting: isConnecting,
-                statusText: statusText,
-                onConfirm: { Task { await connectSelfHosted() } },
-                onPairingLink: { url in
-                    guard let parsed = RunnerPairingLink.parse(url) else { return }
-                    runnerURL = parsed.runnerURL
-                    pairingCode = parsed.code
-                    Task { await connectSelfHosted() }
-                }
-            )
         }
     }
 

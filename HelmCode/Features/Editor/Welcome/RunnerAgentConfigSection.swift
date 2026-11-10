@@ -19,7 +19,6 @@ struct RunnerAgentConfigSection: View {
     @State private var isSaving = false
     @State private var draftEnabled = false
     @State private var draftHarness: AgentHarnessID = .claude
-    @State private var draftProvider: AgentProviderID = .opencodeGo
     @State private var draftApiKey = ""
     @State private var localError: String?
 
@@ -65,10 +64,6 @@ struct RunnerAgentConfigSection: View {
         enableRow
         Divider().padding(.leading, 16)
         harnessPicker(remote)
-        if draftHarness.needsProvider {
-            Divider().padding(.leading, 16)
-            providerPicker
-        }
         Divider().padding(.leading, 16)
         apiKeyRow(remote)
         if let error = remote.error, remote.phase == .error {
@@ -119,16 +114,13 @@ struct RunnerAgentConfigSection: View {
         let selected = draftHarness == id
         return Button {
             draftHarness = id
-            if !id.needsProvider {
-                // keep provider for when user switches back to OpenCode
-            }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: id.systemImage)
-                    .font(.caption.weight(.semibold))
+                harnessIcon(id)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(id.displayName)
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
                         .lineLimit(1)
                     Text(id.subtitle)
                         .font(.caption2)
@@ -149,47 +141,22 @@ struct RunnerAgentConfigSection: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(selected ? Color.accentColor.opacity(0.55) : .clear, lineWidth: 1)
             )
-            .foregroundStyle(selected ? Color.accentColor : .primary)
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
     }
 
-    private var providerPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Provider")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Picker("Provider", selection: $draftProvider) {
-                ForEach(AgentProviderID.allCases) { provider in
-                    Text(provider.displayName).tag(provider)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(isBusy)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-    }
-
     private func apiKeyRow(_ remote: AgentConfigView) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("API Key")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if remote.hasApiKey, draftApiKey.isEmpty {
-                    Text(remote.apiKeyHint ?? "Saved on runner")
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            Text("API Key")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
 
+            // Placeholder stays proportional (like other settings fields); typed key uses mono.
             SecureField(apiKeyPlaceholder(for: draftHarness), text: $draftApiKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.body.monospaced())
+                .font(draftApiKey.isEmpty ? .body : .body.monospaced())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(
@@ -198,9 +165,13 @@ struct RunnerAgentConfigSection: View {
                 )
                 .disabled(isBusy)
 
-            Text("Stored on the runner only. Leave blank to keep the current key.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text(
+                remote.hasApiKey && draftApiKey.isEmpty
+                    ? "A key is already saved on the runner. Leave blank to keep it."
+                    : "Stored on the runner only. Leave blank to keep the current key."
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
 
             Text("ACP stays off until you tap Update. First install can take a minute or two — keep this sheet open.")
                 .font(.caption2)
@@ -228,7 +199,6 @@ struct RunnerAgentConfigSection: View {
         HStack(spacing: 12) {
             if draftEnabled != remote.enabled
                 || draftHarness != (remote.harness ?? draftHarness)
-                || (draftHarness.needsProvider && draftProvider != (remote.provider ?? draftProvider))
                 || !draftApiKey.isEmpty
             {
                 Text("Unsaved changes")
@@ -321,10 +291,10 @@ struct RunnerAgentConfigSection: View {
     }
 
     private var canApply: Bool {
-        if draftEnabled, draftHarness.needsProvider {
-            // provider always has a default
-        }
-        return true
+        guard draftEnabled else { return true }
+        let hasDraftKey = !draftApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasSavedKey = view?.hasApiKey == true
+        return hasDraftKey || hasSavedKey
     }
 
     private func catalogIDs(_ remote: AgentConfigView) -> [AgentHarnessID] {
@@ -332,13 +302,32 @@ struct RunnerAgentConfigSection: View {
         return fromRemote.isEmpty ? AgentHarnessID.allCases : fromRemote
     }
 
+    @ViewBuilder
+    private func harnessIcon(_ id: AgentHarnessID) -> some View {
+        if UIImage(named: id.iconAssetName) != nil {
+            Image(id.iconAssetName)
+                .resizable()
+                .interpolation(.high)
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: id.systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(draftHarness == id ? Color.accentColor : .primary)
+                .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
+        }
+    }
+
     private func apiKeyPlaceholder(for harness: AgentHarnessID) -> String {
         switch harness {
-        case .claude: return "ANTHROPIC_API_KEY"
-        case .codex: return "CODEX_API_KEY / OPENAI_API_KEY"
-        case .cursor: return "CURSOR_API_KEY"
-        case .grok: return "XAI_API_KEY"
-        case .opencode: return "Provider API key"
+        case .claude: return "Anthropic API key"
+        case .codex: return "OpenAI API key"
+        case .cursor: return "Cursor API key"
+        case .grok: return "xAI API key"
+        case .opencode: return "OpenCode Go API key"
         }
     }
 
@@ -346,7 +335,6 @@ struct RunnerAgentConfigSection: View {
         view = remote
         draftEnabled = remote.enabled
         draftHarness = remote.harness ?? .claude
-        draftProvider = remote.provider ?? .opencodeGo
         draftApiKey = ""
         localError = remote.phase == .error ? remote.error : nil
     }
@@ -384,7 +372,7 @@ struct RunnerAgentConfigSection: View {
             harness: draftHarness
         )
         if draftHarness.needsProvider {
-            body.provider = draftProvider
+            body.provider = .opencodeGo
         }
         let trimmedKey = draftApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedKey.isEmpty {
