@@ -371,9 +371,7 @@ struct RunnerAgentConfigSection: View {
             enabled: draftEnabled,
             harness: draftHarness
         )
-        if draftHarness.needsProvider {
-            body.provider = .opencodeGo
-        }
+        // OpenCode provider defaults to opencode-go on the runner when omitted.
         let trimmedKey = draftApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedKey.isEmpty {
             body.apiKey = trimmedKey
