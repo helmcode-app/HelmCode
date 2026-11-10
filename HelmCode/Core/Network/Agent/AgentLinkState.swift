@@ -59,7 +59,7 @@ enum AgentEngineError: LocalizedError, Equatable {
         case .emptyPrompt: return "Prompt is required."
         case .alreadyRunning: return "An agent turn is already in flight."
         case .sessionsDisabled:
-            return "Agent sessions are disabled on the runner (set OPENCODE_ENABLED=true)."
+            return "Agent sessions are off. Open the runner and enable an ACP harness under Agent."
         }
     }
 }

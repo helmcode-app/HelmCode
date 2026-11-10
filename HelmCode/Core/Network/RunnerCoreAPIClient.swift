@@ -95,7 +95,7 @@ struct RunnerCoreAPIClient: Sendable {
                 method: "DELETE",
                 authorize: true
             ),
-            expectedStatus: 200
+            acceptedStatuses: [200]
         )
     }
 
@@ -105,6 +105,30 @@ struct RunnerCoreAPIClient: Sendable {
 
     func status() async throws -> RuntimeStatus {
         try await get(path: "/v1/status", authorize: true)
+    }
+
+    // MARK: - Agent / ACP harness (`/v1/agent`)
+
+    func agentConfig() async throws -> AgentConfigView {
+        try await get(path: "/v1/agent", authorize: true)
+    }
+
+    /// Applies selection. `200` = applied; `503` = persisted but ACP failed to start.
+    /// Long timeout: first enable may download Cursor / npm adapters (often 30–120s+).
+    func putAgentConfig(_ body: AgentConfigUpdateBody) async throws -> AgentConfigView {
+        try await put(
+            path: "/v1/agent",
+            body: body,
+            acceptedStatuses: [200, 503],
+            timeoutInterval: 600
+        )
+    }
+
+    func disableAgent() async throws -> AgentConfigView {
+        try await perform(
+            try makeRequest(path: "/v1/agent", method: "DELETE", authorize: true),
+            acceptedStatuses: [200]
+        )
     }
 
     func setupSession() async throws -> SetupSessionStatus {
@@ -142,8 +166,23 @@ struct RunnerCoreAPIClient: Sendable {
         try await get(path: "/v1/sessions/health", authorize: true)
     }
 
-    func sessionModels(forceRefresh: Bool = false) async throws -> SessionModelsResponse {
-        let path = forceRefresh ? "/v1/sessions/models?refresh=1" : "/v1/sessions/models"
+    func sessionModels(
+        forceRefresh: Bool = false,
+        probeModel: String? = nil
+    ) async throws -> SessionModelsResponse {
+        var items: [URLQueryItem] = []
+        if forceRefresh { items.append(URLQueryItem(name: "refresh", value: "1")) }
+        if let probeModel, !probeModel.isEmpty {
+            items.append(URLQueryItem(name: "model", value: probeModel))
+        }
+        let path: String
+        if items.isEmpty {
+            path = "/v1/sessions/models"
+        } else {
+            var components = URLComponents()
+            components.queryItems = items
+            path = "/v1/sessions/models?\(components.percentEncodedQuery ?? "")"
+        }
         return try await get(path: path, authorize: true)
     }
 
@@ -224,8 +263,82 @@ struct RunnerCoreAPIClient: Sendable {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         return try await perform(
             try makeRequest(path: "/v1/sessions/\(encoded)", method: "DELETE", authorize: true),
-            expectedStatus: 200
+            acceptedStatuses: [200]
         )
+    }
+
+    /// Live SSE stream (`GET /v1/sessions/events`). Caller cancels the task to disconnect.
+    func sessionEvents() -> AsyncThrowingStream<SessionStreamEventDTO, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var request = try makeRequest(
+                        path: "/v1/sessions/events",
+                        method: "GET",
+                        authorize: true
+                    )
+                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    request.timeoutInterval = .infinity
+
+                    let (bytes, response) = try await session.bytes(for: request)
+                    if let http = response as? HTTPURLResponse,
+                       !(200...299).contains(http.statusCode) {
+                        throw HelmNetworkError.http(
+                            http.statusCode,
+                            HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+                        )
+                    }
+
+                    var eventType = ""
+                    var dataLines: [String] = []
+
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { break }
+                        if line.isEmpty {
+                            defer {
+                                eventType = ""
+                                dataLines = []
+                            }
+                            guard !dataLines.isEmpty else { continue }
+                            let payload = dataLines.joined(separator: "\n")
+                            guard let data = payload.data(using: .utf8) else { continue }
+                            if let decoded = try? decoder.decode(SessionStreamEventDTO.self, from: data) {
+                                continuation.yield(decoded)
+                            } else if !eventType.isEmpty,
+                                      let raw = try? decoder.decode(JSONValue.self, from: data) {
+                                continuation.yield(
+                                    SessionStreamEventDTO(
+                                        type: eventType,
+                                        at: nil,
+                                        sessionId: nil,
+                                        data: raw
+                                    )
+                                )
+                            }
+                            continue
+                        }
+                        if line.hasPrefix(":") { continue }
+                        if line.hasPrefix("event:") {
+                            eventType = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                            continue
+                        }
+                        if line.hasPrefix("data:") {
+                            dataLines.append(
+                                String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                            )
+                        }
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 
     // MARK: - HTTP
@@ -249,7 +362,25 @@ struct RunnerCoreAPIClient: Sendable {
             bodyData: data,
             timeoutInterval: timeoutInterval
         )
-        return try await perform(request, expectedStatus: expectedStatus)
+        return try await perform(request, acceptedStatuses: [expectedStatus])
+    }
+
+    private func put<T: Decodable, B: Encodable>(
+        path: String,
+        body: B,
+        acceptedStatuses: Set<Int>,
+        authorize: Bool = true,
+        timeoutInterval: TimeInterval = 0
+    ) async throws -> T {
+        let data = try encoder.encode(body)
+        let request = try makeRequest(
+            path: path,
+            method: "PUT",
+            authorize: authorize,
+            bodyData: data,
+            timeoutInterval: timeoutInterval
+        )
+        return try await perform(request, acceptedStatuses: acceptedStatuses)
     }
 
     private struct OkResponse: Decodable {
@@ -259,7 +390,7 @@ struct RunnerCoreAPIClient: Sendable {
     private func postEmpty<T: Decodable>(path: String, expectedStatus: Int) async throws -> T {
         try await perform(
             try makeRequest(path: path, method: "POST", authorize: true),
-            expectedStatus: expectedStatus
+            acceptedStatuses: [expectedStatus]
         )
     }
 
@@ -285,7 +416,10 @@ struct RunnerCoreAPIClient: Sendable {
         request.httpMethod = method
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Accept")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.timeoutInterval = timeoutInterval > 0 ? timeoutInterval : (method == "POST" ? 60 : 15)
+        // Mutating calls (POST/PUT) may wait on harness install; others stay snappy.
+        request.timeoutInterval = timeoutInterval > 0
+            ? timeoutInterval
+            : (method == "POST" || method == "PUT" ? 60 : 15)
 
         if authorize {
             let token = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -302,7 +436,7 @@ struct RunnerCoreAPIClient: Sendable {
 
     private func perform<T: Decodable>(
         _ request: URLRequest,
-        expectedStatus: Int? = nil
+        acceptedStatuses: Set<Int>? = nil
     ) async throws -> T {
         let (data, response): (Data, URLResponse)
         do {
@@ -315,14 +449,14 @@ struct RunnerCoreAPIClient: Sendable {
             throw HelmNetworkError.invalidResponse
         }
 
-        if let expectedStatus, http.statusCode != expectedStatus {
-            throw HelmNetworkError.http(
-                http.statusCode,
-                errorMessage(from: data, fallback: HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
-            )
-        }
-
-        if expectedStatus == nil, !(200...299).contains(http.statusCode) {
+        if let acceptedStatuses {
+            if !acceptedStatuses.contains(http.statusCode) {
+                throw HelmNetworkError.http(
+                    http.statusCode,
+                    errorMessage(from: data, fallback: HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+                )
+            }
+        } else if !(200...299).contains(http.statusCode) {
             throw HelmNetworkError.http(
                 http.statusCode,
                 errorMessage(from: data, fallback: HTTPURLResponse.localizedString(forStatusCode: http.statusCode))

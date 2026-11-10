@@ -241,6 +241,41 @@ struct WorkspaceNode: Identifiable, Hashable, Sendable {
         return nil
     }
 
+    /// Resolve a file by exact / normalized / suffix path (LLM fences often omit the repo root).
+    func findFile(matchingPath raw: String) -> WorkspaceNode? {
+        let needle = VFSPath.normalize(raw)
+        guard !needle.isEmpty else { return nil }
+        if let exact = find(path: needle), !exact.isDirectory {
+            return exact
+        }
+
+        var suffixHit: WorkspaceNode?
+        var fileNameHit: WorkspaceNode?
+        let fileName = VFSPath.fileName(of: needle)
+
+        func walk(_ node: WorkspaceNode) {
+            if suffixHit != nil { return }
+            if node.isDirectory {
+                for child in node.children { walk(child) }
+                return
+            }
+            let candidate = VFSPath.normalize(node.path)
+            if candidate == needle || candidate.hasSuffix("/" + needle) {
+                if suffixHit == nil || candidate.count < VFSPath.normalize(suffixHit!.path).count {
+                    // Prefer the shortest full path among suffix matches (closest to the needle).
+                    suffixHit = node
+                }
+                return
+            }
+            if fileNameHit == nil, !fileName.isEmpty, VFSPath.fileName(of: candidate) == fileName {
+                fileNameHit = node
+            }
+        }
+
+        walk(self)
+        return suffixHit ?? fileNameHit
+    }
+
     /// Depth-first list of non-directory nodes (e.g. Quick Open suggestions).
     func collectFiles(limit: Int) -> [WorkspaceNode] {
         guard limit > 0 else { return [] }

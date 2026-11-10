@@ -37,25 +37,25 @@ struct AgentComposerPromptEditor: View {
                 .padding(.vertical, 4)
                 .focused(promptFocused)
                 .disabled(isDisabled)
-                // Hardware keyboard: Return → send · Option+Return → newline (Cursor-style).
+                // Hardware keyboard: Return → newline · Command+Return → send · menu confirm when open.
                 .onKeyPress(keys: [.return]) { press in
-                    if press.modifiers.contains(.option) {
-                        onInsertNewline()
-                        return .handled
-                    }
-                    // Ignore other modifiers (⌘/⇧) so they don't also send by accident.
-                    if !press.modifiers.isEmpty {
-                        return .ignored
-                    }
                     if menuKeys?.isActive == true {
                         _ = menuKeys?.onConfirm()
                         return .handled
                     }
-                    if canSend {
-                        onSend()
+                    if press.modifiers.contains(.command) {
+                        if canSend {
+                            onSend()
+                            return .handled
+                        }
                         return .handled
                     }
-                    return .handled
+                    if press.modifiers.contains(.option) {
+                        onInsertNewline()
+                        return .handled
+                    }
+                    // Regular Return inserts a newline into the TextEditor.
+                    return .ignored
                 }
                 .onKeyPress(.upArrow) {
                     guard menuKeys?.isActive == true else { return .ignored }

@@ -43,14 +43,26 @@ final class AgentNetworkEngine: ObservableObject {
     @Published var baseBranch: String = "main"
     /// Cursor-style composer mode (agent / plan / ask).
     @Published var composerMode: AgentComposerMode = .agent
-    /// Selected model id (`provider/model`, e.g. opencode-go/glm-5.1).
+    /// Selected model id (`provider/model`). Empty until harness catalog loads.
     @Published var modelID: String = AgentModelOption.defaultID
     /// Reasoning effort for the next prompt (`thinkLevel` on session prompt).
     @Published var thinkLevel: AgentThinkLevel = .medium
+    /// Effort / reasoning levels advertised by the current harness (empty → hide Think UI).
+    @Published var availableThinkLevels: [AgentThinkLevel] = []
+    /// Thinking on/off for the next prompt when the harness advertises a toggle.
+    @Published var thinkingEnabled: Bool = true
+    /// Thinking on/off values advertised by the harness (empty → hide Thinking UI).
+    @Published var availableThinkingLevels: [AgentThinkLevel] = []
+    /// Context window for the next prompt.
+    @Published var contextLevel: AgentThinkLevel = AgentThinkLevel(rawValue: "")
+    /// Context sizes advertised by the harness (empty → hide Context UI).
+    @Published var availableContextLevels: [AgentThinkLevel] = []
     /// Fast inference for the next prompt (`fast` on session prompt).
     @Published var fastMode: Bool = false
-    /// Live models from GET /v1/sessions/models (connected providers only).
-    @Published var modelCatalog: [AgentModelOption] = AgentModelOption.fallbackCatalog
+    /// Whether the current harness advertises a fast option.
+    @Published var supportsFastMode: Bool = false
+    /// Live models from GET /v1/sessions/models (current harness only).
+    @Published var modelCatalog: [AgentModelOption] = []
     /// Agent sessions for the Cursor-style chat list.
     @Published var sessions: [AgentSessionDTO] = []
     /// Active chat session title (from list / create).
@@ -95,6 +107,8 @@ final class AgentNetworkEngine: ObservableObject {
     var reconnectTask: Task<Void, Never>?
     var healthTask: Task<Void, Never>?
     var pollTask: Task<Void, Never>?
+    /// Live `GET /v1/sessions/events` SSE (usage / config fan-out).
+    var eventsTask: Task<Void, Never>?
     var eventSequence = 0
     var sessionID: String?
     var seenTimelineIDs: Set<String> = []
@@ -103,11 +117,24 @@ final class AgentNetworkEngine: ObservableObject {
     var timelineIDsBeforeTurn: Set<String> = []
     /// Avoid re-fetching / re-publishing the model list on every reconnect unless forced.
     var modelCatalogLoaded = false
+    /// Bumps on each catalog request so slower responses cannot overwrite newer caps.
+    var modelCatalogGeneration = 0
+    /// Per-model Effort / Thinking / Context / Fast from the last successful probe.
+    var modelCapsByID: [String: AgentModelCaps] = [:]
     /// Consecutive stable history fingerprints while waiting for multi-step turns to settle.
     var turnStablePolls = 0
     var turnLastFingerprint: String?
     let pollInterval: TimeInterval
     let log = Logger(subsystem: "com.helmcode.HelmCode", category: "Agent")
+
+    /// Capability snapshot for one model id (Cursor caps are model-dependent).
+    struct AgentModelCaps: Equatable, Sendable {
+        var thinkLevels: [AgentThinkLevel]
+        var thinkingLevels: [AgentThinkLevel]
+        var contextLevels: [AgentThinkLevel]
+        var context: String?
+        var supportsFast: Bool
+    }
 
     init(
         baseURLString: String = "http://127.0.0.1:18080",
@@ -139,6 +166,7 @@ final class AgentNetworkEngine: ObservableObject {
         reconnectTask = nil
         healthTask?.cancel()
         healthTask = nil
+        stopEvents()
         stopPolling()
         socketState = .disconnected
         if !phase.isBusy {
@@ -167,14 +195,23 @@ final class AgentNetworkEngine: ObservableObject {
     /// Project closed / no runner — tear down agent link and clear transient task UI state.
     func detachFromProject() {
         stop()
-        sessionID = nil
-        advertisedModes = []
+        clearChatSurface()
         workspaceId = HelmWorkspace.defaultID
         if !phase.isBusy {
-            resetSession()
             clearContextPaths()
             prompt = ""
         }
+    }
+
+    /// Drop active chat + history list so a project switch cannot show the previous workspace.
+    func clearChatSurface() {
+        stopPolling()
+        sessionID = nil
+        sessionTitle = nil
+        sessions = []
+        advertisedModes = []
+        sessionUsage = nil
+        resetSession()
     }
 
     // MARK: - Context paths
@@ -234,7 +271,7 @@ final class AgentNetworkEngine: ObservableObject {
         if let helm = error as? HelmNetworkError {
             switch helm {
             case .http(let code, let message):
-                if code == 503, message.localizedCaseInsensitiveContains("disabled") {
+                if Self.isSessionsConfigError(statusCode: code, message: message) {
                     return AgentEngineError.sessionsDisabled.localizedDescription
                 }
                 return "HTTP \(code): \(message)"
@@ -246,5 +283,14 @@ final class AgentNetworkEngine: ObservableObject {
             return agent.localizedDescription
         }
         return error.localizedDescription
+    }
+
+    /// Permanent config gap — do not reconnect-loop until the user enables `/v1/agent`.
+    static func isSessionsConfigError(statusCode: Int, message: String) -> Bool {
+        guard statusCode == 503 else { return false }
+        let m = message.lowercased()
+        return m.contains("disabled")
+            || m.contains("put /v1/agent")
+            || m.contains("configure via")
     }
 }

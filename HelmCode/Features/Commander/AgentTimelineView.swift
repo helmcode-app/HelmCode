@@ -68,7 +68,16 @@ struct AgentTimelineView: View {
                                 AgentTurnCard(
                                     parts: parts,
                                     showDone: isLatestTurn && agent.phase == .succeeded,
-                                    onOpenPath: onOpenPath
+                                    onOpenPath: onOpenPath,
+                                    onSelectAnswer: { answer in
+                                        agent.prompt = answer
+                                    },
+                                    onSubmitAnswer: { answer in
+                                        agent.prompt = answer
+                                        Task {
+                                            try? await agent.launchHeadlessAgent()
+                                        }
+                                    }
                                 )
                                 .id(item.id)
                             }
@@ -99,6 +108,12 @@ struct AgentTimelineView: View {
         }
     }
 
+    private var sessionsNeedConfig: Bool {
+        guard case .failed(let message) = agent.socketState else { return false }
+        return message.localizedCaseInsensitiveContains("sessions are off")
+            || message.localizedCaseInsensitiveContains("enable an acp")
+    }
+
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
@@ -106,10 +121,14 @@ struct AgentTimelineView: View {
                     .font(.caption2.weight(.bold).monospaced())
                     .tracking(1.4)
                     .foregroundStyle(.tertiary)
-                Text("Start a conversation")
+                Text(sessionsNeedConfig ? "Enable an agent harness" : "Start a conversation")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text("Ask, plan, or let the agent edit — shortcuts below seed the composer.")
+                Text(
+                    sessionsNeedConfig
+                        ? "Open the paired runner, pick Claude / Codex / Cursor / Grok / OpenCode, add an API key, then enable ACP."
+                        : "Ask, plan, or let the agent edit — shortcuts below seed the composer."
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -117,58 +136,64 @@ struct AgentTimelineView: View {
             .padding(.horizontal, AgentChrome.timelineGutter)
             .padding(.bottom, 18)
 
-            VStack(spacing: 0) {
-                ForEach(Array(Self.starters.enumerated()), id: \.element.title) { index, starter in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(AgentChrome.hairline(colorScheme))
-                            .frame(height: 1)
-                            .padding(.leading, 52)
-                    }
-                    Button {
-                        withAnimation(AgentChrome.chipSpring) {
-                            agent.prompt = starter.prompt
-                        }
-                    } label: {
-                        HStack(alignment: .center, spacing: 12) {
-                            Text(AgentChrome.indexLabel(index + 1))
-                                .font(.caption.weight(.bold).monospaced())
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 28, alignment: .trailing)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(starter.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                Text(starter.subtitle)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 8)
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, AgentChrome.timelineGutter)
-                        .padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(agent.phase.isBusy || !agent.socketState.isReady)
-                }
+            if !sessionsNeedConfig {
+                starterList
             }
-            .background(
-                AgentChrome.promptFill,
-                in: RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous)
-                    .strokeBorder(AgentChrome.hairline(colorScheme), lineWidth: 1)
-            )
-            .padding(.horizontal, AgentChrome.timelineGutter)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 28)
         .padding(.bottom, 20)
+    }
+
+    private var starterList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(Self.starters.enumerated()), id: \.element.title) { index, starter in
+                if index > 0 {
+                    Rectangle()
+                        .fill(AgentChrome.hairline(colorScheme))
+                        .frame(height: 1)
+                        .padding(.leading, 52)
+                }
+                Button {
+                    withAnimation(AgentChrome.chipSpring) {
+                        agent.prompt = starter.prompt
+                    }
+                } label: {
+                    HStack(alignment: .center, spacing: 12) {
+                        Text(AgentChrome.indexLabel(index + 1))
+                            .font(.caption.weight(.bold).monospaced())
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 28, alignment: .trailing)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(starter.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(starter.subtitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, AgentChrome.timelineGutter)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(agent.phase.isBusy || !agent.socketState.isReady)
+            }
+        }
+        .background(
+            AgentChrome.promptFill,
+            in: RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentChrome.cardRadius, style: .continuous)
+                .strokeBorder(AgentChrome.hairline(colorScheme), lineWidth: 1)
+        )
+        .padding(.horizontal, AgentChrome.timelineGutter)
     }
 
     private func errorBanner(_ message: String) -> some View {

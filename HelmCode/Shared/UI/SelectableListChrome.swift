@@ -31,11 +31,14 @@ struct AgentModelIdentityLabel: View {
                 .font(.body.weight(titleWeight))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
-            Text(wireID)
-                .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(1)
+                .lineLimit(2)
+            if wireID != title, !wireID.isEmpty {
+                Text(wireID)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+            }
         }
     }
 }

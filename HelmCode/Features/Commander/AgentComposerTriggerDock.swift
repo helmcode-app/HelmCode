@@ -67,6 +67,13 @@ struct AgentComposerTriggerDock<Composer: View>: View {
                 )
             )
         }
+        .onChange(of: agent.prompt) { _, newPrompt in
+            // Wholesale prompt clears (send) must drop selection before the next
+            // `detect` pass, otherwise stale String.Index values trap.
+            if newPrompt.isEmpty, promptSelection != nil {
+                promptSelection = nil
+            }
+        }
         .onChange(of: rawTrigger?.menuIdentity) { _, identity in
             // Esc closes the menu for this token; leaving the token (or deleting `/` `@`)
             // clears suppression so the next trigger can open it again.

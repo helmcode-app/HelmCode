@@ -69,7 +69,13 @@ enum WorkspaceRuntimeBridge {
         }
 
         let workspaceId = project.workspaceId
+        let workspaceChanged = agent.workspaceId != workspaceId
+        // Drop previous project's chats immediately so the right rail cannot lag.
+        if workspaceChanged {
+            agent.clearChatSurface()
+        }
         agent.workspaceId = workspaceId
+        guard !Task.isCancelled else { return }
 
         if current != target {
             BackendConnectionSync.apply(
@@ -80,6 +86,7 @@ enum WorkspaceRuntimeBridge {
                 agent: agent
             )
             await engine.checkBackendHealth()
+            guard !Task.isCancelled else { return }
             vfs.workspaceId = workspaceId
             vfs.start()
             agent.bindToProjectRunner(from: engine)
@@ -88,14 +95,19 @@ enum WorkspaceRuntimeBridge {
 
         BackendConnectionSync.syncVFS(from: engine, to: vfs)
         BackendConnectionSync.syncAgent(from: engine, to: agent)
-        let workspaceChanged = vfs.workspaceId != workspaceId
+        let vfsWorkspaceChanged = vfs.workspaceId != workspaceId
         vfs.workspaceId = workspaceId
 
-        if workspaceChanged || !vfs.connectionState.isReady {
+        if vfsWorkspaceChanged || !vfs.connectionState.isReady {
             await engine.checkBackendHealth()
+            guard !Task.isCancelled else { return }
             vfs.start()
         }
         agent.bindToProjectRunner(from: engine)
+        // Same runner stays connected — connect() will not re-run, so reload chats here.
+        if workspaceChanged {
+            await agent.reloadChatsForCurrentWorkspace()
+        }
     }
 
     /// Close project / welcome: stop remote tunnels; keep HTTP engine idle for Settings probes.

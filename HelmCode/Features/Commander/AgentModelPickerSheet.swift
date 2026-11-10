@@ -17,8 +17,18 @@ struct AgentModelPickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                thinkLevelSection
-                fastSection
+                if !agent.availableContextLevels.isEmpty {
+                    contextSection
+                }
+                if !agent.availableThinkingLevels.isEmpty {
+                    thinkingSection
+                }
+                if !agent.availableThinkLevels.isEmpty {
+                    thinkLevelSection
+                }
+                if agent.supportsFastMode {
+                    fastSection
+                }
                 modelSection
             }
             .listStyle(.insetGrouped)
@@ -63,9 +73,42 @@ struct AgentModelPickerSheet: View {
         }
     }
 
+    private var contextSection: some View {
+        Section {
+            ForEach(agent.availableContextLevels) { level in
+                SelectableListRow(selected: agent.contextLevel == level) {
+                    agent.contextLevel = level
+                    agent.syncUsageMeterToContextLevel()
+                } leading: {
+                    Text(level.title)
+                        .font(.body.weight(agent.contextLevel == level ? .semibold : .regular))
+                }
+                .accessibilityLabel(level.title)
+            }
+        } header: {
+            Text("Context")
+        }
+    }
+
+    private var thinkingSection: some View {
+        Section {
+            ForEach([true, false], id: \.self) { on in
+                SelectableListRow(selected: agent.thinkingEnabled == on) {
+                    agent.thinkingEnabled = on
+                } leading: {
+                    Text(on ? "On" : "Off")
+                        .font(.body.weight(agent.thinkingEnabled == on ? .semibold : .regular))
+                }
+                .accessibilityLabel(on ? "Thinking on" : "Thinking off")
+            }
+        } header: {
+            Text("Thinking")
+        }
+    }
+
     private var thinkLevelSection: some View {
         Section {
-            ForEach(AgentThinkLevel.allCases) { level in
+            ForEach(agent.availableThinkLevels) { level in
                 SelectableListRow(selected: agent.thinkLevel == level) {
                     agent.thinkLevel = level
                 } leading: {
@@ -75,7 +118,7 @@ struct AgentModelPickerSheet: View {
                 .accessibilityLabel(level.title)
             }
         } header: {
-            Text("Think Level")
+            Text("Effort")
         }
     }
 
@@ -98,7 +141,7 @@ struct AgentModelPickerSheet: View {
     private func row(_ model: AgentModelOption) -> some View {
         let selected = model.id == agent.modelID
         return SelectableListRow(selected: selected) {
-            agent.modelID = model.id
+            selectModel(model.id)
         } leading: {
             AgentModelIdentityLabel(
                 model: model,
@@ -106,6 +149,17 @@ struct AgentModelPickerSheet: View {
             )
         }
         .accessibilityLabel(model.title)
+    }
+
+    private func selectModel(_ id: String) {
+        guard agent.modelID != id else { return }
+        agent.modelID = id
+        // Show last-known knobs for this model immediately; probe refreshes after.
+        agent.applyCachedCapsForCurrentModel()
+        Task {
+            await agent.refreshModelCatalog(force: true, probeModel: id)
+            snapshot = curatedModels()
+        }
     }
 
     private func curatedModels() -> [AgentModelOption] {
@@ -119,9 +173,14 @@ struct AgentModelPickerSheet: View {
     private func reload() async {
         isLoading = true
         defer { isLoading = false }
-        if agent.needsModelCatalogRefresh {
-            await agent.refreshModelCatalog(force: true)
-        }
+        agent.applyCachedCapsForCurrentModel()
+        let probe = agent.modelID.isEmpty ? nil : agent.modelID
+        // Soft refresh when catalog already loaded — avoids racing a full
+        // force discover that used to flip Effort/Fast with another model.
+        await agent.refreshModelCatalog(
+            force: agent.needsModelCatalogRefresh,
+            probeModel: probe
+        )
         let next = curatedModels()
         if !next.isEmpty {
             snapshot = next

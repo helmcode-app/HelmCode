@@ -2,8 +2,8 @@
 //  RunnerSetupSheet.swift
 //  HelmCode
 //
-//  Runner management: status header, mounted workspaces, GitHub Device Flow,
-//  and searchable repo catalog.
+//  Runner management: status header, mounted workspaces, ACP harness selection,
+//  GitHub Device Flow, and searchable repo catalog.
 //
 
 import SwiftUI
@@ -116,6 +116,22 @@ struct RunnerSetupView: View {
                     }
 
                     dangerZoneSection
+
+                    if !isUnauthorized {
+                        RunnerAgentConfigSection(
+                            makeClient: { client() },
+                            isParentBusy: isBusy,
+                            onToast: { presentError($0) },
+                            onAgentBecameReady: {
+                                let sameRunner =
+                                    RunnerURL.normalizeHTTP(agent.baseURLString)
+                                    == RunnerURL.normalizeHTTP(runner.url)
+                                if sameRunner {
+                                    agent.reconnectNow(reason: "agent harness ready")
+                                }
+                            }
+                        )
+                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)

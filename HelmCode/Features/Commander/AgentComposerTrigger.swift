@@ -41,8 +41,12 @@ struct AgentComposerTrigger: Equatable {
     }
 
     static func detect(in text: String, selection: TextSelection?) -> AgentComposerTrigger? {
+        guard !text.isEmpty else { return nil }
         guard AgentPromptEditing.isCollapsed(selection) else { return nil }
         let caret = AgentPromptEditing.insertionIndex(in: text, selection: selection)
+        // insertionIndex already clamps stale TextSelection; still refuse walking
+        // if the caret somehow sits outside the current prompt.
+        guard caret >= text.startIndex, caret <= text.endIndex else { return nil }
         var start = caret
         while start > text.startIndex {
             let prev = text.index(before: start)

@@ -16,6 +16,7 @@ struct WorkspaceRuntimeModifier: ViewModifier {
     @ObservedObject var runnerStatus: ProjectRunnerStatusMonitor
 
     @State private var scmRefreshTask: Task<Void, Never>?
+    @State private var activateProjectTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
@@ -24,7 +25,8 @@ struct WorkspaceRuntimeModifier: ViewModifier {
                 refreshRunnerStatus()
             }
             .onChange(of: session.selectedProjectID) { _, _ in
-                Task { await activateSelectedProject() }
+                activateProjectTask?.cancel()
+                activateProjectTask = Task { await activateSelectedProject() }
             }
             .onChange(of: engine.baseURLString) { _, _ in
                 syncEnginesAndStatus()
@@ -80,6 +82,7 @@ struct WorkspaceRuntimeModifier: ViewModifier {
             vfs: vfs,
             agent: agent
         )
+        guard !Task.isCancelled else { return }
         refreshRunnerStatus()
         scheduleSourceControlRefresh(forceLoading: true)
     }

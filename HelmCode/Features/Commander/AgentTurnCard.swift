@@ -16,6 +16,8 @@ struct AgentTurnCard: View {
     /// Show green Done on the Worked-for row (only the latest completed turn).
     var showDone: Bool = false
     var onOpenPath: ((String) -> Void)? = nil
+    var onSelectAnswer: ((String) -> Void)? = nil
+    var onSubmitAnswer: ((String) -> Void)? = nil
 
     @State private var thoughtExpanded = false
     @State private var expandedToolIDs: Set<String> = []
@@ -69,6 +71,10 @@ struct AgentTurnCard: View {
                 toolsSection
             }
 
+            if !content.questions.isEmpty {
+                questionsSection
+            }
+
             answerSection
 
             footerRow
@@ -101,36 +107,53 @@ struct AgentTurnCard: View {
         .tint(.secondary)
     }
 
+    @ViewBuilder
     private var toolsSection: some View {
+        let displayTools = content.tools.filter { $0.kind != .askQuestion }
+        if !displayTools.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(displayTools) { action in
+                    AgentToolRow(
+                        action: action,
+                        isExpanded: expandedToolIDs.contains(action.id),
+                        onToggle: {
+                            if expandedToolIDs.contains(action.id) {
+                                expandedToolIDs.remove(action.id)
+                            } else {
+                                expandedToolIDs.insert(action.id)
+                            }
+                        },
+                        onOpenPath: onOpenPath
+                    )
+                }
+            }
+            .padding(.vertical, 2)
+            .onChange(of: content.tools.map(\.id).joined(separator: "|")) { _, _ in
+                autoExpandFileTools()
+            }
+            .onAppear {
+                autoExpandFileTools()
+            }
+        }
+    }
+
+    private var questionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(content.tools) { action in
-                AgentToolRow(
-                    action: action,
-                    isExpanded: expandedToolIDs.contains(action.id),
-                    onToggle: {
-                        if expandedToolIDs.contains(action.id) {
-                            expandedToolIDs.remove(action.id)
-                        } else {
-                            expandedToolIDs.insert(action.id)
-                        }
-                    },
-                    onOpenPath: onOpenPath
+            ForEach(content.questions) { question in
+                AgentQuestionCard(
+                    question: question,
+                    onSelectOption: onSelectAnswer,
+                    onSubmitAnswer: onSubmitAnswer
                 )
             }
         }
         .padding(.vertical, 2)
-        .onChange(of: content.tools.map(\.id).joined(separator: "|")) { _, _ in
-            autoExpandFileTools()
-        }
-        .onAppear {
-            autoExpandFileTools()
-        }
     }
 
     @ViewBuilder
     private var answerSection: some View {
         if !content.answer.isEmpty {
-            AgentMarkdownView(source: content.answer)
+            AgentMarkdownView(source: content.answer, onOpenPath: onOpenPath)
         } else if isRunning, content.thought.isEmpty, content.tools.isEmpty {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.mini)
@@ -141,7 +164,7 @@ struct AgentTurnCard: View {
         } else if content.answer.isEmpty, !isRunning, content.thought.isEmpty, content.tools.isEmpty {
             let fallback = parts.last?.message ?? ""
             if !fallback.isEmpty, !AgentChatFormatting.looksLikeRawToolNoise(fallback) {
-                AgentMarkdownView(source: fallback)
+                AgentMarkdownView(source: fallback, onOpenPath: onOpenPath)
             }
         }
     }

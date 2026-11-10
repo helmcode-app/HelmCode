@@ -234,7 +234,15 @@ struct ModelsSettingsView: View {
             let mapped = AgentModelOption.fromResponse(response)
             applyCatalog(mapped)
             if agentTargetsThisRunner, let agent {
-                agent.adoptModelCatalog(mapped, serverDefault: response.defaultModel)
+                agent.adoptModelCatalog(
+                    mapped,
+                    serverDefault: response.defaultModel,
+                    thinkLevels: response.thinkLevels ?? [],
+                    thinkingLevels: response.thinkingLevels ?? [],
+                    contextLevels: response.contextLevels ?? [],
+                    context: response.context,
+                    supportsFast: response.supportsFast ?? false
+                )
             }
         } catch {
             loadError = error.localizedDescription

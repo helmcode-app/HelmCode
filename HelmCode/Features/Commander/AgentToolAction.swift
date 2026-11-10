@@ -24,11 +24,14 @@ struct AgentToolAction: Identifiable, Equatable {
     let status: String?
 
     enum Kind {
-        case read, write, edit, run, search, list, other
+        case read, write, edit, run, search, list, askQuestion, other
     }
 
     var kind: Kind {
         let n = name.lowercased()
+        if n.contains("ask_user_question") || n.contains("ask-question") || n.contains("ask_question") {
+            return .askQuestion
+        }
         if n == "read" || n == "view" || n == "cat" { return .read }
         if n == "write" || n == "create" { return .write }
         if n == "edit" || n == "patch" || n.contains("replace") || n.contains("patch") {
@@ -40,7 +43,7 @@ struct AgentToolAction: Identifiable, Equatable {
         return .other
     }
 
-    /// pi-style verb: Read / Edit / Write / Run / …
+    /// pi-style verb: Read / Edit / Write / Run / Ask / …
     var verb: String {
         switch kind {
         case .read: return "Read"
@@ -49,6 +52,7 @@ struct AgentToolAction: Identifiable, Equatable {
         case .run: return "Run"
         case .search: return "Search"
         case .list: return "List"
+        case .askQuestion: return "Ask"
         case .other:
             let first = label.split(separator: " ").first.map(String.init) ?? name
             return first.prefix(1).uppercased() + first.dropFirst()
@@ -63,6 +67,11 @@ struct AgentToolAction: Identifiable, Equatable {
         let parts = label.split(separator: " ", maxSplits: 1).map(String.init)
         if parts.count == 2 { return parts[1] }
         return label
+    }
+
+    var questions: [AgentUserQuestion] {
+        guard kind == .askQuestion else { return [] }
+        return AgentUserQuestion.parse(from: content)
     }
 
     var contentLines: [String] {

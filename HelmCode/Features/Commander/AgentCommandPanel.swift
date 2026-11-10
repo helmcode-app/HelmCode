@@ -87,11 +87,21 @@ struct AgentCommandPanel: View {
     }
 
     private func openPathInEditor(_ path: String) {
-        guard let project = session.selectedProject,
-              let node = project.root.find(path: path),
-              !node.isDirectory
-        else { return }
-        session.openFile(node.id)
+        guard let project = session.selectedProject else { return }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'"))
+        guard !trimmed.isEmpty else { return }
+
+        if let node = project.root.find(path: trimmed) ?? project.root.find(path: VFSPath.normalize(trimmed)),
+           !node.isDirectory
+        {
+            session.openFile(node.id)
+            return
+        }
+
+        if let node = project.root.findFile(matchingPath: trimmed) {
+            session.openFile(node.id)
+        }
     }
 
     private var composerDock: some View {
@@ -112,20 +122,29 @@ struct AgentCommandPanel: View {
     // MARK: - Launch
 
     private func launch() async {
+        let submittedPrompt = agent.prompt
+        guard !submittedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        // Immediately clear UI state and defocus like ChatGPT / Claude
+        promptSelection = nil
+        promptFocused = false
+        agent.prompt = ""
         isLaunching = true
         defer { isLaunching = false }
+
         seedBranchFromProject()
-        for path in AgentPromptTagging.paths(in: agent.prompt) {
+        for path in AgentPromptTagging.paths(in: submittedPrompt) {
             agent.addContextPath(path)
         }
         do {
-            _ = try await agent.launchHeadlessAgent()
+            _ = try await agent.launchHeadlessAgent(explicitPrompt: submittedPrompt)
             guard agent.phase != .cancelled else { return }
-            promptSelection = nil
-            promptFocused = false
             await agent.refreshSessionList()
         } catch {
-            // phase / lastError already set on the engine — keep prompt for retry.
+            // Restore prompt if launch failed prior to processing so user input is not lost
+            if case .failed = agent.phase {
+                agent.prompt = submittedPrompt
+            }
         }
     }
 

@@ -113,6 +113,7 @@ struct AgentToolRow: View {
         case .run: return "Running…"
         case .search: return "Searching…"
         case .list: return "Listing…"
+        case .askQuestion: return "Asking…"
         case .other: return "Working…"
         }
     }

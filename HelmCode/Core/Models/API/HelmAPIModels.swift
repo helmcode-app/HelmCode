@@ -61,8 +61,12 @@ struct RuntimeStatus: Codable, Sendable, Equatable {
     let mode: HelmMode
     let version: String
     let authRequired: Bool?
+    /// ACP gateway ready (`phase=ready`).
     let sessionsEnabled: Bool?
     let sessionsManaged: Bool?
+    /// Selection has `enabled=true` (may still be starting / error).
+    let agentConfigured: Bool?
+    let agentPhase: String?
     let agentHarness: String?
     let agentTransport: String?
     let vfsEnabled: Bool?

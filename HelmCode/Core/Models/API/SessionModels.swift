@@ -73,6 +73,10 @@ struct SessionPromptBody: Encodable, Sendable {
     var contextPaths: [String]?
     /// ACP-style thought level: `low` / `medium` / `high` / `xhigh`.
     var thinkLevel: String?
+    /// Thinking on/off when the harness advertises a toggle.
+    var thinking: String?
+    /// Context window size (`200k` / `1m` / …).
+    var context: String?
     /// Faster, cheaper inference when true.
     var fast: Bool?
 }
@@ -152,6 +156,15 @@ struct SessionsRuntimeHealth: Codable, Sendable, Equatable {
     let harness: String?
 }
 
+// MARK: - SSE (`GET /v1/sessions/events`)
+
+struct SessionStreamEventDTO: Codable, Sendable, Equatable {
+    let type: String
+    let at: String?
+    let sessionId: String?
+    let data: JSONValue?
+}
+
 // MARK: - Models catalog (GET /v1/sessions/models)
 
 struct SessionModelDTO: Codable, Sendable, Equatable, Identifiable, Hashable {
@@ -165,4 +178,14 @@ struct SessionModelsResponse: Codable, Sendable, Equatable {
     let models: [SessionModelDTO]
     let defaultModel: String?
     let connected: [String]?
+    /// Effort / reasoning levels the current harness accepts. Empty/nil → hide Think UI.
+    let thinkLevels: [String]?
+    /// Thinking on/off values when advertised (`false`/`true`).
+    let thinkingLevels: [String]?
+    /// Context window sizes when advertised (`200k`/`1m`/…).
+    let contextLevels: [String]?
+    /// Current context window selection when known.
+    let context: String?
+    /// Whether the harness advertises a fast / turbo option.
+    let supportsFast: Bool?
 }

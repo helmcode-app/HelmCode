@@ -57,38 +57,66 @@ enum AgentComposerMode: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Reasoning effort sent with `/v1/sessions/:id/prompt`.
-enum AgentThinkLevel: String, CaseIterable, Identifiable, Sendable {
-    case low
-    case medium
-    case high
-    case xhigh
+/// Prefer levels from `GET /v1/sessions/models.thinkLevels` (harness-advertised).
+struct AgentThinkLevel: Identifiable, Hashable, Sendable {
+    let rawValue: String
 
     var id: String { rawValue }
 
     var title: String {
-        switch self {
-        case .low: return "Low"
-        case .medium: return "Medium"
-        case .high: return "High"
-        case .xhigh: return "Extra High"
+        switch rawValue.lowercased() {
+        case "low", "minimal", "min": return "Low"
+        case "medium", "default", "normal": return "Medium"
+        case "high": return "High"
+        case "xhigh", "extra-high", "extrahigh", "max", "maximum": return "Extra High"
+        case "true", "on", "yes", "1": return "On"
+        case "false", "off", "no", "0": return "Off"
+        case "none": return "None"
+        default:
+            // Context sizes (`200k`, `1m`) stay compact.
+            if rawValue.range(of: #"^\d+[kKmM]?$"#, options: .regularExpression) != nil {
+                return rawValue.lowercased()
+            }
+            return rawValue
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
         }
+    }
+
+    static let low = AgentThinkLevel(rawValue: "low")
+    static let medium = AgentThinkLevel(rawValue: "medium")
+    static let high = AgentThinkLevel(rawValue: "high")
+    static let xhigh = AgentThinkLevel(rawValue: "xhigh")
+
+    static func fromWire(_ values: [String]?) -> [AgentThinkLevel] {
+        let trimmed = (values ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        var out: [AgentThinkLevel] = []
+        for value in trimmed {
+            let key = value.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            out.append(AgentThinkLevel(rawValue: value))
+        }
+        return out
     }
 }
 
 /// Selectable model labels for the composer (`provider/model` for `/v1/sessions` prompt).
-/// Prefer live catalog from `GET /v1/sessions/models` (connected providers only).
+/// Prefer live catalog from `GET /v1/sessions/models` (current harness only).
 struct AgentModelOption: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     /// Provider display name (e.g. "OpenCode Go") — section headers / grouping.
     let subtitle: String
 
-    /// Fallback when runner catalog is unavailable.
-    static let fallbackCatalog: [AgentModelOption] = [
-        .init(id: "opencode-go/glm-5.1", title: "glm-5.1", subtitle: "opencode-go"),
-    ]
+    /// Empty until the runner catalog loads — never invent OpenCode defaults.
+    static let fallbackCatalog: [AgentModelOption] = []
 
-    static let defaultID = "opencode-go/glm-5.1"
+    static let defaultID = ""
 
     /// Wire id shown under the title in lists (`opencode-go/glm-5.1`).
     var wireID: String { id }
@@ -97,8 +125,29 @@ struct AgentModelOption: Identifiable, Hashable, Sendable {
         catalog.first { $0.id == id }?.title ?? id
     }
 
+    /// Strip Cursor-style `Name[context,effort/fast,…]` decorations.
+    static func cleanLabel(_ raw: String) -> String {
+        guard let bracket = raw.firstIndex(of: "[") else {
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return String(raw[..<bracket]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func fromDTO(_ dto: SessionModelDTO) -> AgentModelOption {
-        AgentModelOption(id: dto.id, title: dto.name, subtitle: dto.provider)
+        let id = cleanLabel(dto.id)
+        let title = cleanLabel(dto.name.isEmpty ? id : dto.name)
+        let displayTitle: String = {
+            if let slash = title.lastIndex(of: "/"), slash < title.endIndex {
+                let tail = String(title[title.index(after: slash)...])
+                return tail.isEmpty ? title : tail
+            }
+            return title
+        }()
+        return AgentModelOption(
+            id: id.isEmpty ? dto.id : id,
+            title: displayTitle.isEmpty ? id : displayTitle,
+            subtitle: dto.provider
+        )
     }
 
     static func fromResponse(_ response: SessionModelsResponse) -> [AgentModelOption] {

@@ -58,9 +58,11 @@ extension AgentNetworkEngine {
                         // after the timeline already looks complete — fetch once
                         // more (and again shortly after) so the composer meter fills.
                         await self.pollHistoryOnce(sessionId: sessionId, forDisplay: true)
+                        await self.refreshSessionUsage(sessionId: sessionId)
                         Task { @MainActor [weak self] in
                             try? await Task.sleep(nanoseconds: 1_500_000_000)
                             await self?.pollHistoryOnce(sessionId: sessionId, forDisplay: true)
+                            await self?.refreshSessionUsage(sessionId: sessionId)
                         }
                         break
                     }
@@ -91,6 +93,18 @@ extension AgentNetworkEngine {
             applyHistory(history, forDisplay: forDisplay)
         } catch {
             log.debug("session history poll soft-fail: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Pull latest session.usage even when history entries did not change.
+    func refreshSessionUsage(sessionId: String) async {
+        do {
+            let session = try await api.getSession(id: sessionId)
+            if let usage = session.usage {
+                applyUsageUpdate(usage)
+            }
+        } catch {
+            log.debug("session usage soft-fail: \(error.localizedDescription, privacy: .public)")
         }
     }
 

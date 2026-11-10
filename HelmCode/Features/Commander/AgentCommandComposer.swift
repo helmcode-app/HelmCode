@@ -24,11 +24,18 @@ struct AgentCommandComposer: View {
     @State private var modelPickerOpen = false
 
     private var composerDisabled: Bool {
-        agent.phase.isBusy || !agent.socketState.isReady
+        isRunning || !agent.socketState.isReady
     }
 
     private var isRunning: Bool {
         isLaunching || agent.phase.isBusy
+    }
+
+    private var promptPlaceholderText: String {
+        if isRunning {
+            return "Working on response…"
+        }
+        return agent.composerMode.promptPlaceholder
     }
 
     var body: some View {
@@ -48,7 +55,7 @@ struct AgentCommandComposer: View {
                 AgentComposerPromptEditor(
                     text: $agent.prompt,
                     selection: $promptSelection,
-                    placeholder: agent.composerMode.promptPlaceholder,
+                    placeholder: promptPlaceholderText,
                     isDisabled: composerDisabled,
                     canSend: canLaunch,
                     promptFocused: promptFocused,

@@ -12,12 +12,14 @@ struct AgentTurnContent: Equatable {
     var thought: String
     var tools: [AgentToolAction]
     var answer: String
+    var questions: [AgentUserQuestion] = []
 
     static func partition(parts: [EventLog]) -> AgentTurnContent {
         var thoughts: [String] = []
         var tools: [AgentToolAction] = []
         var answers: [String] = []
         var intermediateAnswers: [String] = []
+        var parsedQuestions: [AgentUserQuestion] = []
 
         for p in parts {
             let kind = (p.detail?["kind"]?.stringValue ?? "message").lowercased()
@@ -26,8 +28,15 @@ struct AgentTurnContent: Equatable {
             let structured = AgentToolAction.parse(from: p.detail)
             if !structured.isEmpty {
                 tools.append(contentsOf: structured)
+                for action in structured where action.kind == .askQuestion {
+                    parsedQuestions.append(contentsOf: action.questions)
+                }
             } else {
-                tools.append(contentsOf: AgentToolAction.parseLegacyLabels(from: p.detail))
+                let legacy = AgentToolAction.parseLegacyLabels(from: p.detail)
+                tools.append(contentsOf: legacy)
+                for action in legacy where action.kind == .askQuestion {
+                    parsedQuestions.append(contentsOf: action.questions)
+                }
             }
 
             if let r = p.detail?["reasoning"]?.stringValue?
@@ -74,7 +83,8 @@ struct AgentTurnContent: Equatable {
         return AgentTurnContent(
             thought: dedupeJoin(thoughts),
             tools: AgentToolAction.dedupe(tools),
-            answer: dedupeJoin(answers)
+            answer: dedupeJoin(answers),
+            questions: parsedQuestions
         )
     }
 

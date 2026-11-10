@@ -24,10 +24,14 @@ extension AgentNetworkEngine {
             ingestTimelineEntry(entry, sessionId: sid, forDisplay: forDisplay)
         }
 
+        let fallbackSize = sessionUsage?.size
+            ?? SessionUsage.tokens(fromContextLabel: contextLevel.rawValue)
+            ?? 200_000
+
         if let usage = history.usage
             ?? history.session?.usage
-            ?? history.entries.reversed().compactMap({ SessionUsage.parse(from: $0.meta) }).first {
-            sessionUsage = usage
+            ?? history.entries.reversed().compactMap({ SessionUsage.parse(from: $0.meta, fallbackSize: fallbackSize) }).first {
+            applyUsageUpdate(usage)
         }
 
         if let session = history.session {
@@ -209,6 +213,10 @@ extension AgentNetworkEngine {
             eventLog.append(EventLog(from: event, sequence: eventSequence))
         }
 
+        if let eventUsage = SessionUsage.parse(from: event.detail, fallbackSize: sessionUsage?.size) {
+            applyUsageUpdate(eventUsage)
+        }
+
         activeTaskID = event.taskId
         // Never flip to processing while only restoring history for display.
         if !forDisplay {
@@ -261,6 +269,30 @@ extension AgentNetworkEngine {
                 modelID: modelID,
                 contextPaths: contextPaths
             )
+        )
+    }
+
+    /// Single source of truth for updating session usage without wiping live used counts.
+    func applyUsageUpdate(_ incoming: SessionUsage) {
+        let modelTokens = SessionUsage.tokens(fromContextLabel: contextLevel.rawValue)
+        let effectiveSize: Int = {
+            if let modelTokens, modelTokens > 0 {
+                return modelTokens
+            }
+            if incoming.size > 0 {
+                return incoming.size
+            }
+            return sessionUsage?.size ?? 200_000
+        }()
+
+        let currentUsed = sessionUsage?.used ?? 0
+        // Keep the high-water mark so late placeholder `{used:0}` polls cannot reset the meter.
+        let effectiveUsed = max(incoming.used, currentUsed)
+        let effectiveCost = incoming.cost ?? sessionUsage?.cost
+        sessionUsage = SessionUsage(
+            used: min(effectiveUsed, effectiveSize),
+            size: effectiveSize,
+            cost: effectiveCost
         )
     }
 }

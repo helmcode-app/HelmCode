@@ -13,18 +13,28 @@ extension AgentNetworkEngine {
 
     // MARK: - Session list (Cursor-style)
 
-    /// Refresh `sessions` from the runner (newest first).
+    /// Refresh `sessions` from the runner (newest first), scoped to the open workspace.
     func refreshSessionList() async {
         do {
             let list = try await api.listSessions()
-            sessions = list.sorted { sessionSortKey($0) > sessionSortKey($1) }
+            let scoped = sessionsForCurrentWorkspace(list)
+            sessions = scoped.sorted { sessionSortKey($0) > sessionSortKey($1) }
             if let sid = sessionID {
-                let listed = list.first(where: { $0.id == sid })?.title
+                let listed = scoped.first(where: { $0.id == sid })?.title
                 sessionTitle = SessionChatTitle.coalesce(listed, sessionTitle)
             }
         } catch {
             log.debug("listSessions soft-fail: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// After a project/workspace switch: clear previous chats, then reload this workspace.
+    func reloadChatsForCurrentWorkspace() async {
+        clearChatSurface()
+        guard !Task.isCancelled, socketState.isReady else { return }
+        await refreshSessionList()
+        guard !Task.isCancelled else { return }
+        await restoreSessionTimelineIfNeeded()
     }
 
     /// Start a fresh chat (new agent session).
@@ -161,7 +171,7 @@ extension AgentNetworkEngine {
         do {
             let sessions = try await api.listSessions()
             // Prefer most recently updated (string timestamps may be millis or ISO).
-            let ordered = sessions.sorted { a, b in
+            let ordered = sessionsForCurrentWorkspace(sessions).sorted { a, b in
                 sessionSortKey(a) > sessionSortKey(b)
             }
             for session in ordered.prefix(12) {
@@ -174,6 +184,13 @@ extension AgentNetworkEngine {
             log.debug("listSessions soft-fail: \(error.localizedDescription, privacy: .public)")
         }
         return nil
+    }
+
+    func sessionsForCurrentWorkspace(_ list: [AgentSessionDTO]) -> [AgentSessionDTO] {
+        list.filter { session in
+            let wid = session.workspaceId ?? HelmWorkspace.defaultID
+            return wid == workspaceId
+        }
     }
 
     func historyHasContent(_ history: SessionHistoryEnvelope) -> Bool {
@@ -196,7 +213,7 @@ extension AgentNetworkEngine {
         }
         // workspaceId is owned by the open project; session meta must not move VFS.
         if let usage = session.usage {
-            sessionUsage = usage
+            applyUsageUpdate(usage)
         }
         if !availableComposerModes.contains(composerMode) {
             composerMode = .agent
