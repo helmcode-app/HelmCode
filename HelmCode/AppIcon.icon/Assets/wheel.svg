@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs><linearGradient id="g" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7DF0FF"/><stop offset="1" stop-color="#3B7BFF"/></linearGradient></defs>
+<circle cx="512" cy="512" r="268" fill="none" stroke="url(#g)" stroke-width="64"/>
+<line x1="512.0" y1="362.0" x2="512.0" y2="167.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="512.0" cy="140.0" r="40" fill="url(#g)"/>
+<line x1="618.1" y1="405.9" x2="756.0" y2="268.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="775.0" cy="249.0" r="40" fill="url(#g)"/>
+<line x1="662.0" y1="512.0" x2="857.0" y2="512.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="884.0" cy="512.0" r="40" fill="url(#g)"/>
+<line x1="618.1" y1="618.1" x2="756.0" y2="756.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="775.0" cy="775.0" r="40" fill="url(#g)"/>
+<line x1="512.0" y1="662.0" x2="512.0" y2="857.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="512.0" cy="884.0" r="40" fill="url(#g)"/>
+<line x1="405.9" y1="618.1" x2="268.0" y2="756.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="249.0" cy="775.0" r="40" fill="url(#g)"/>
+<line x1="362.0" y1="512.0" x2="167.0" y2="512.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="140.0" cy="512.0" r="40" fill="url(#g)"/>
+<line x1="405.9" y1="405.9" x2="268.0" y2="268.0" stroke="url(#g)" stroke-width="46" stroke-linecap="round"/>
+<circle cx="249.0" cy="249.0" r="40" fill="url(#g)"/>
+</svg>
